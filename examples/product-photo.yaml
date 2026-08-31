@@ -1,0 +1,37 @@
+# Example template: a parameterized product-photography prompt.
+#
+# Try it:
+#   ptm render examples/product-photo.yaml --var product_name="a red sneaker" --pretty
+#   ptm render examples/product-photo.yaml --var product_name="a red sneaker" --var background_color=black --pretty
+
+name: product-photo-on-solid-background
+version: "1"
+capability: mock-generate
+description: >
+  A studio product photo on a solid background. `product_name` is required;
+  everything else has a sensible default.
+
+variables:
+  product_name:
+    type: string
+    required: true
+    description: What the photo is of, e.g. "a red sneaker"
+  background_color:
+    type: string
+    default: white
+    description: Backdrop color
+  width:
+    type: integer
+    default: 1024
+  height:
+    type: integer
+    default: 1024
+  seed:
+    type: integer
+    default: 0
+
+params:
+  prompt: "professional studio product photo of {{ product_name }}, on a seamless {{ background_color }} background, soft even lighting, high detail, centered composition"
+  width: "${width}"
+  height: "${height}"
+  seed: "${seed}"
