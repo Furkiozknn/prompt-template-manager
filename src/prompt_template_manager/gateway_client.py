@@ -57,6 +57,16 @@ def submit_and_wait(
         deadline = time.monotonic() + timeout
         while True:
             poll_response = client.get(base_url + polling_url)
+            if poll_response.status_code == 410:
+                # ai-job-gateway's contract (server.py) returns 410 Gone, not
+                # a 200 body with status="expired", once a terminal job's
+                # result has passed its TTL. raise_for_status() below would
+                # turn that into an unhandled httpx.HTTPStatusError instead
+                # of the clean GatewayJobFailedError this function promises
+                # -- check for it explicitly first, same as ai_job_gateway's
+                # own client does.
+                detail = poll_response.json().get("detail", "job result expired")
+                raise GatewayJobFailedError(detail)
             poll_response.raise_for_status()
             record = poll_response.json()
             status = record["status"]

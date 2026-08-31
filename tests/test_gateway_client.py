@@ -55,6 +55,22 @@ def test_job_error_status_raises_gateway_job_failed_error():
         )
 
 
+def test_job_expired_status_raises_gateway_job_failed_error():
+    """The server returns 410 Gone (not a 200 body with status='expired')
+    once a terminal job's result has passed its TTL -- this must surface as
+    a clean GatewayJobFailedError, not an unhandled httpx.HTTPStatusError."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(202, json={"id": "job-1", "polling_url": "/v1/jobs/job-1"})
+        return httpx.Response(410, json={"detail": "this job's result has expired"})
+
+    with pytest.raises(GatewayJobFailedError, match="expired"):
+        submit_and_wait(
+            "http://gateway.test", "echo", {"a": 1}, poll_interval=0, http_client=_client_for(handler)
+        )
+
+
 def test_never_ready_times_out():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST":
