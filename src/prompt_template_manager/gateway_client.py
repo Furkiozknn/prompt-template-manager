@@ -14,6 +14,16 @@ from typing import Any, Optional
 
 import httpx
 
+from .gateway_poll import (
+    GatewayHTTPError,
+    classify_poll_body,
+    expired_detail,
+    is_expired_poll_response,
+    parse_submission,
+    resolve_polling_url,
+    submit_url,
+)
+
 
 class GatewaySubmissionError(Exception):
     def __init__(self, status_code: int, message: str) -> None:
@@ -49,36 +59,28 @@ def submit_and_wait(
     owns_client = http_client is None
     base_url = gateway_url.rstrip("/")
     try:
-        response = client.post(f"{base_url}/v1/{capability}", json=params)
-        if response.status_code >= 400:
-            raise GatewaySubmissionError(response.status_code, response.text)
-        polling_url = response.json()["polling_url"]
+        response = client.post(submit_url(base_url, capability), json=params)
+        body_json = response.json() if response.status_code < 400 else None
+        try:
+            job_id, polling_url = parse_submission(response.status_code, body_json, response.text)
+        except GatewayHTTPError as exc:
+            raise GatewaySubmissionError(exc.status_code, exc.body_text) from exc
+        del job_id  # this client's public contract only ever returns the result, not the id
 
         deadline = time.monotonic() + timeout
         while True:
-            poll_response = client.get(base_url + polling_url)
-            if poll_response.status_code == 410:
-                # ai-job-gateway's contract (server.py) returns 410 Gone, not
-                # a 200 body with status="expired", once a terminal job's
-                # result has passed its TTL. raise_for_status() below would
-                # turn that into an unhandled httpx.HTTPStatusError instead
-                # of the clean GatewayJobFailedError this function promises
-                # -- check for it explicitly first, same as ai_job_gateway's
-                # own client does.
-                detail = poll_response.json().get("detail", "job result expired")
-                raise GatewayJobFailedError(detail)
+            poll_response = client.get(resolve_polling_url(base_url, polling_url))
+            if is_expired_poll_response(poll_response.status_code):
+                raise GatewayJobFailedError(expired_detail(poll_response.json()))
             poll_response.raise_for_status()
-            record = poll_response.json()
-            status = record["status"]
-            if status == "ready":
-                return record["result"]
-            if status == "error":
-                raise GatewayJobFailedError(record.get("error") or "job failed with no error message")
-            if status == "expired":
-                raise GatewayJobFailedError(record.get("error") or "job result expired")
+            outcome = classify_poll_body(poll_response.json())
+            if outcome.ready:
+                return outcome.result
+            if outcome.terminal:
+                raise GatewayJobFailedError(outcome.error_message)
             if time.monotonic() >= deadline:
                 raise GatewayJobTimeoutError(
-                    f"job did not finish within {timeout}s (last observed status: {status!r})"
+                    f"job did not finish within {timeout}s (last observed status: {outcome.status!r})"
                 )
             time.sleep(poll_interval)
     finally:
