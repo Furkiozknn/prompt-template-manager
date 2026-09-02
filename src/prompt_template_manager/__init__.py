@@ -11,7 +11,7 @@ Public surface::
 
 from __future__ import annotations
 
-from .loader import load_template_file, load_template_str
+from .loader import load_template_file, load_template_str, load_vars_file
 from .models import Template, TemplateError, VariableSpec
 from .renderer import render_template, resolve_variables, validate_template
 
@@ -21,6 +21,7 @@ __all__ = [
     "TemplateError",
     "load_template_file",
     "load_template_str",
+    "load_vars_file",
     "render_template",
     "resolve_variables",
     "validate_template",

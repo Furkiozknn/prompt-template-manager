@@ -99,6 +99,69 @@ def test_info_lists_variables(monkeypatch, capsys, template_file):
     assert "who: string, default='world'" in out
 
 
+def test_validate_multiple_templates_reports_summary_and_exit_code(monkeypatch, capsys, tmp_path):
+    good = tmp_path / "good.yaml"
+    good.write_text(VALID_YAML)
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(BAD_YAML)
+
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["validate", str(good), str(bad)])
+    assert exc_info.value.code == 1
+
+    out = capsys.readouterr()
+    assert "OK: greet v1" in out.out
+    assert "1 valid, 1 invalid" in out.out
+    assert "INVALID" in out.err
+    assert str(bad) in out.err
+
+
+def test_validate_multiple_valid_templates_exits_zero(monkeypatch, capsys, tmp_path):
+    first = tmp_path / "a.yaml"
+    first.write_text(VALID_YAML)
+    second = tmp_path / "b.yaml"
+    second.write_text(VALID_YAML)
+
+    _run(monkeypatch, ["validate", str(first), str(second)])
+    out = capsys.readouterr().out
+    assert "2 valid, 0 invalid" in out
+
+
+def test_render_with_vars_file(monkeypatch, capsys, tmp_path):
+    template_path = tmp_path / "greet.yaml"
+    template_path.write_text(VALID_YAML)
+    vars_file = tmp_path / "vars.yaml"
+    vars_file.write_text("who: Grace\n")
+
+    _run(monkeypatch, ["render", str(template_path), "--vars-file", str(vars_file)])
+    out = capsys.readouterr().out
+    assert json.loads(out) == {"message": "hello, Grace!"}
+
+
+def test_render_var_flag_overrides_vars_file(monkeypatch, capsys, tmp_path):
+    template_path = tmp_path / "greet.yaml"
+    template_path.write_text(VALID_YAML)
+    vars_file = tmp_path / "vars.yaml"
+    vars_file.write_text("who: Grace\n")
+
+    _run(
+        monkeypatch,
+        ["render", str(template_path), "--vars-file", str(vars_file), "--var", "who=Ada"],
+    )
+    out = capsys.readouterr().out
+    assert json.loads(out) == {"message": "hello, Ada!"}
+
+
+def test_render_missing_vars_file_exits_nonzero(monkeypatch, capsys, template_file, tmp_path):
+    with pytest.raises(SystemExit) as exc_info:
+        _run(
+            monkeypatch,
+            ["render", str(template_file), "--vars-file", str(tmp_path / "nope.yaml")],
+        )
+    assert exc_info.value.code == 1
+    assert "no such vars file" in capsys.readouterr().err
+
+
 def test_submit_happy_path(monkeypatch, capsys, template_file):
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST":
