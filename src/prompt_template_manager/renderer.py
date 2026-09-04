@@ -22,7 +22,7 @@ import re
 from typing import Any
 
 from jinja2 import StrictUndefined, UndefinedError, meta
-from jinja2.exceptions import SecurityError
+from jinja2.exceptions import SecurityError, TemplateSyntaxError
 from jinja2.sandbox import SandboxedEnvironment
 
 from .models import Template, TemplateError
@@ -133,6 +133,13 @@ def render_value(value: Any, resolved_vars: dict[str, Any]) -> Any:
             return resolved_vars[var_name]
         try:
             return _jinja_env.from_string(value).render(**resolved_vars)
+        except TemplateSyntaxError as exc:
+            # Without this, a malformed template ({{ foo, {% if %}) walked a
+            # raw Jinja traceback out through the CLI - the same bug class
+            # ai-workflow-engine already fixed. Same translation here.
+            raise TemplateError(
+                f"template syntax error in {value!r} (line {exc.lineno}): {exc.message}"
+            ) from exc
         except UndefinedError as exc:
             raise TemplateError(f"undefined variable referenced in {value!r}: {exc}") from exc
         except SecurityError as exc:
@@ -166,7 +173,12 @@ def find_referenced_variables(value: Any, found: set[str] | None = None) -> set[
         if direct:
             found.add(direct.group(1))
         else:
-            ast = _jinja_env.parse(value)
+            try:
+                ast = _jinja_env.parse(value)
+            except TemplateSyntaxError as exc:
+                raise TemplateError(
+                    f"template syntax error in {value!r} (line {exc.lineno}): {exc.message}"
+                ) from exc
             found |= meta.find_undeclared_variables(ast)
     return found
 

@@ -4,7 +4,13 @@ import pytest
 
 from prompt_template_manager.loader import load_template_str
 from prompt_template_manager.models import TemplateError
-from prompt_template_manager.renderer import render_template, resolve_variables, validate_template
+from prompt_template_manager.renderer import (
+    find_referenced_variables,
+    render_template,
+    render_value,
+    resolve_variables,
+    validate_template,
+)
 
 BASIC = """
 name: greet
@@ -254,3 +260,19 @@ variables:
     template = load_template_str(src)
     with pytest.raises(TemplateError, match="unsafe operation"):
         render_template(template, {})
+
+
+def test_malformed_template_surfaces_as_template_error_not_a_traceback():
+    # {{ without }} used to raise raw jinja2.TemplateSyntaxError through
+    # the CLI - the same bug class ai-workflow-engine fixed. It must be a
+    # TemplateError like every other authoring mistake.
+    with pytest.raises(TemplateError) as excinfo:
+        render_value("hello {{ name", {"name": "x"})
+    assert "syntax error" in str(excinfo.value)
+    assert "line 1" in str(excinfo.value)
+
+
+def test_malformed_template_in_variable_scan_is_also_a_template_error():
+    with pytest.raises(TemplateError) as excinfo:
+        find_referenced_variables({"prompt": "{% if %}"})
+    assert "syntax error" in str(excinfo.value)
