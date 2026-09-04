@@ -207,3 +207,50 @@ variables:
 def test_validate_clean_template_has_no_warnings():
     template = load_template_str(BASIC)
     assert validate_template(template) == []
+
+
+def test_unknown_override_suggests_close_match():
+    template = load_template_str(BASIC)
+    with pytest.raises(TemplateError, match=r"did you mean 'who'"):
+        render_template(template, {"wh0": "Ada"})
+
+
+def test_missing_required_variables_are_all_reported_together():
+    src = """
+name: x
+version: "1"
+capability: echo
+params:
+  a: "{{ first }}"
+  b: "{{ second }}"
+variables:
+  first:
+    type: string
+    required: true
+  second:
+    type: string
+    required: true
+"""
+    template = load_template_str(src)
+    with pytest.raises(TemplateError) as exc_info:
+        render_template(template, {})
+    message = str(exc_info.value)
+    assert "'first'" in message
+    assert "'second'" in message
+
+
+def test_sandboxed_environment_blocks_unsafe_attribute_access():
+    src = """
+name: x
+version: "1"
+capability: echo
+params:
+  a: "{{ subject.__class__.__mro__ }}"
+variables:
+  subject:
+    type: string
+    default: cats
+"""
+    template = load_template_str(src)
+    with pytest.raises(TemplateError, match="unsafe operation"):
+        render_template(template, {})

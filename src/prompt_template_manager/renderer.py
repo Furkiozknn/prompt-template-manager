@@ -17,16 +17,28 @@ at all) passes through unchanged as a literal.
 
 from __future__ import annotations
 
+import difflib
 import re
 from typing import Any
 
-from jinja2 import Environment, StrictUndefined, UndefinedError, meta
+from jinja2 import StrictUndefined, UndefinedError, meta
+from jinja2.exceptions import SecurityError
+from jinja2.sandbox import SandboxedEnvironment
 
 from .models import Template, TemplateError
 
 _DIRECT_SIGIL_RE = re.compile(r"^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$")
 
-_jinja_env = Environment(undefined=StrictUndefined)
+# Templates are loaded from files, and a template file can come from a
+# third party (shared, downloaded, pulled from a registry) just as easily
+# as a source file can. A plain jinja2.Environment gives a template full
+# Python object access (``{{ ''.__class__.__mro__[1].__subclasses__() }}``
+# and friends) which is a real code-execution surface, not a theoretical
+# one - see the README's Security section. SandboxedEnvironment blocks
+# attribute/method access outside an allow-list while leaving ordinary
+# variable interpolation (the only thing legitimate templates here do)
+# completely unaffected.
+_jinja_env = SandboxedEnvironment(undefined=StrictUndefined)
 
 
 def _coerce(value: Any, var_type: str, var_name: str) -> Any:
@@ -62,15 +74,36 @@ def _coerce(value: Any, var_type: str, var_name: str) -> Any:
     raise TemplateError(f"variable {var_name!r}: unknown type {var_type!r}")  # pragma: no cover
 
 
+def _describe_unknown(name: str, known: list[str]) -> str:
+    suggestions = difflib.get_close_matches(name, known, n=1)
+    if suggestions:
+        return f"{name!r} (did you mean {suggestions[0]!r}?)"
+    return repr(name)
+
+
 def resolve_variables(template: Template, overrides: dict[str, Any]) -> dict[str, Any]:
     """Merge CLI/caller-supplied overrides with declared defaults, validate
     required variables are present, coerce every value to its declared
     type, and reject any override for a name the template never declared."""
-    unknown = set(overrides) - set(template.variables)
+    known = list(template.variables)
+    unknown = set(overrides) - set(known)
     if unknown:
+        described = ", ".join(_describe_unknown(name, known) for name in sorted(unknown))
         raise TemplateError(
-            f"unknown variable(s) passed: {', '.join(sorted(unknown))} "
+            f"unknown variable(s) passed: {described} "
             f"(not declared in {template.source_path or template.name})"
+        )
+
+    missing = [
+        name
+        for name, spec in template.variables.items()
+        if name not in overrides and spec.default is None and spec.required
+    ]
+    if missing:
+        named = ", ".join(repr(name) for name in missing)
+        raise TemplateError(
+            f"missing required variable(s): {named} "
+            "-- pass with --var name=value (or --vars-file), or add a default in the template"
         )
 
     resolved: dict[str, Any] = {}
@@ -79,8 +112,6 @@ def resolve_variables(template: Template, overrides: dict[str, Any]) -> dict[str
             raw = overrides[var_name]
         elif spec.default is not None:
             raw = spec.default
-        elif spec.required:
-            raise TemplateError(f"missing required variable: {var_name!r}")
         else:
             resolved[var_name] = None
             continue
@@ -104,6 +135,12 @@ def render_value(value: Any, resolved_vars: dict[str, Any]) -> Any:
             return _jinja_env.from_string(value).render(**resolved_vars)
         except UndefinedError as exc:
             raise TemplateError(f"undefined variable referenced in {value!r}: {exc}") from exc
+        except SecurityError as exc:
+            raise TemplateError(
+                f"template attempted an unsafe operation in {value!r}: {exc} "
+                "(templates render in a sandboxed Jinja2 environment; only variable "
+                "interpolation and safe filters are permitted, see README Security section)"
+            ) from exc
     return value
 
 

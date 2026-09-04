@@ -8,7 +8,7 @@ import sys
 from typing import Any
 
 from .gateway_client import GatewayJobFailedError, GatewayJobTimeoutError, GatewaySubmissionError, submit_and_wait
-from .loader import load_template_file
+from .loader import load_template_file, load_vars_file
 from .models import TemplateError
 from .renderer import render_template, validate_template
 
@@ -24,20 +24,45 @@ def _parse_var_args(pairs: list[str]) -> dict[str, str]:
 
 
 def _cmd_validate(args: argparse.Namespace) -> None:
-    try:
-        template = load_template_file(args.template)
-        warnings = validate_template(template)
-    except TemplateError as exc:
-        print(f"INVALID: {exc}", file=sys.stderr)
+    ok_count = 0
+    invalid_count = 0
+    for path in args.templates:
+        try:
+            template = load_template_file(path)
+            warnings = validate_template(template)
+        except TemplateError as exc:
+            print(f"INVALID: {path}: {exc}", file=sys.stderr)
+            invalid_count += 1
+            continue
+
+        print(f"OK: {template.name} v{template.version} ({path})")
+        for warning in warnings:
+            print(f"  warning: {warning}")
+        ok_count += 1
+
+    if len(args.templates) > 1:
+        print(f"\n{ok_count} valid, {invalid_count} invalid")
+
+    if invalid_count:
         raise SystemExit(1)
 
-    print(f"OK: {template.name} v{template.version} ({args.template})")
-    for warning in warnings:
-        print(f"  warning: {warning}")
+
+def _resolve_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    """CLI `--var KEY=VALUE` flags, layered on top of an optional
+    `--vars-file` -- `--var` always wins on a name given both ways."""
+    overrides = _parse_var_args(args.var)
+    if getattr(args, "vars_file", None):
+        try:
+            file_vars = load_vars_file(args.vars_file)
+        except TemplateError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        overrides = {**file_vars, **overrides}
+    return overrides
 
 
 def _cmd_render(args: argparse.Namespace) -> None:
-    overrides = _parse_var_args(args.var)
+    overrides = _resolve_overrides(args)
     try:
         template = load_template_file(args.template)
         rendered = render_template(template, overrides)
@@ -75,7 +100,7 @@ def _cmd_info(args: argparse.Namespace) -> None:
 
 
 def _cmd_submit(args: argparse.Namespace) -> None:
-    overrides = _parse_var_args(args.var)
+    overrides = _resolve_overrides(args)
     try:
         template = load_template_file(args.template)
         rendered = render_template(template, overrides)
@@ -98,13 +123,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="ptm", description="prompt-template-manager")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    validate_parser = subparsers.add_parser("validate", help="check a template for structural problems")
-    validate_parser.add_argument("template")
+    validate_parser = subparsers.add_parser(
+        "validate", help="check one or more templates for structural problems"
+    )
+    validate_parser.add_argument(
+        "templates", nargs="+", metavar="TEMPLATE", help="one or more template files (shell globs work, e.g. templates/*.yaml)"
+    )
     validate_parser.set_defaults(func=_cmd_validate)
 
     render_parser = subparsers.add_parser("render", help="render a template to a concrete params JSON object")
     render_parser.add_argument("template")
     render_parser.add_argument("--var", action="append", default=[], help="KEY=VALUE, repeatable")
+    render_parser.add_argument(
+        "--vars-file", help="JSON or YAML file of variable name -> value; --var overrides take precedence"
+    )
     render_parser.add_argument("--pretty", action="store_true", help="pretty-print the JSON output")
     render_parser.set_defaults(func=_cmd_render)
 
@@ -118,6 +150,9 @@ def main() -> None:
     submit_parser.add_argument("template")
     submit_parser.add_argument("--gateway-url", required=True)
     submit_parser.add_argument("--var", action="append", default=[], help="KEY=VALUE, repeatable")
+    submit_parser.add_argument(
+        "--vars-file", help="JSON or YAML file of variable name -> value; --var overrides take precedence"
+    )
     submit_parser.add_argument("--timeout", type=float, default=60.0)
     submit_parser.set_defaults(func=_cmd_submit)
 

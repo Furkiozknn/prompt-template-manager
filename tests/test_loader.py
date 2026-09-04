@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from prompt_template_manager.loader import load_template_file, load_template_str
+from prompt_template_manager.loader import load_template_file, load_template_str, load_vars_file
 from prompt_template_manager.models import TemplateError
 
 VALID_YAML = """
@@ -57,3 +57,33 @@ def test_shipped_example_template_is_valid():
     assert template.capability == "mock-generate"
     assert "product_name" in template.variables
     assert template.variables["product_name"].required is True
+
+
+def test_load_vars_file_parses_yaml(tmp_path: Path):
+    path = tmp_path / "vars.yaml"
+    path.write_text("product_name: a red sneaker\nwidth: 512\n")
+    assert load_vars_file(path) == {"product_name": "a red sneaker", "width": 512}
+
+
+def test_load_vars_file_parses_json(tmp_path: Path):
+    path = tmp_path / "vars.json"
+    path.write_text('{"product_name": "a red sneaker", "width": 512}')
+    assert load_vars_file(path) == {"product_name": "a red sneaker", "width": 512}
+
+
+def test_load_vars_file_empty_file_is_empty_dict(tmp_path: Path):
+    path = tmp_path / "vars.yaml"
+    path.write_text("")
+    assert load_vars_file(path) == {}
+
+
+def test_load_vars_file_rejects_non_mapping(tmp_path: Path):
+    path = tmp_path / "vars.yaml"
+    path.write_text("- not\n- a\n- mapping\n")
+    with pytest.raises(TemplateError, match="must contain a mapping"):
+        load_vars_file(path)
+
+
+def test_load_vars_file_missing_file_raises(tmp_path: Path):
+    with pytest.raises(TemplateError, match="no such vars file"):
+        load_vars_file(tmp_path / "does-not-exist.yaml")
