@@ -1,3 +1,5 @@
+![prompt-template-manager - versioned prompt templates you review in a pull request](assets/banner.svg)
+
 # prompt-template-manager
 
 **Your prompts deserve `git diff`, not a database row.**
