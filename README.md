@@ -138,11 +138,15 @@ params = render_template(template, {"product_name": "a red sneaker"})
 
 ## Variable types
 
+<img src="assets/render.svg" alt="The render path: a template checked into your repo plus CLI variables are coerced to their declared types, rendered through Jinja2 SandboxedEnvironment with StrictUndefined, and emitted as exactly the params shape the gateway POST endpoint takes. Four failures each name what failed: an uncoercible value, an undefined variable, a sandbox escape attempt, and a required variable declared with a default." width="100%">
+
 `string`, `integer`, `float`, `boolean`. A CLI `--var` value always arrives as a string (that's just how CLI args work) and gets coerced to the declared type — `--var width=512` becomes the integer `512`, `--var shout=true` becomes the boolean `True` (accepts `true`/`false`/`1`/`0`/`yes`/`no`, case-insensitive). A value that can't be coerced (`--var width=not-a-number`) is a render-time error naming exactly which variable and value failed.
 
 A `required: true` variable and a `default:` are mutually exclusive at the model level — a required variable has no default by definition, and declaring both is rejected as a template error rather than silently picking one.
 
 ## Security
+
+<img src="assets/security.svg" alt="What the Jinja2 sandbox does and does not do: it blocks underscore attribute access, the class-hierarchy escape and reaching arbitrary Python objects, and makes a typo variable raise instead of rendering empty; it does not vet what a rendered prompt asks a model to do, does not filter the response, and does not make an unreviewed template safe." width="100%">
 
 A prompt template is a file, and a file can come from somewhere other than your own keyboard: a shared team library, a downloaded example, a registry, a pull request from someone you haven't fully vetted. **Treat a template file with the same suspicion you'd treat a shell script from an unknown source.**
 

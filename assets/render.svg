@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 528" width="1200" height="528" role="img" aria-label="The render path: a template checked into your repo plus CLI variables are coerced to their declared types, rendered through Jinja2's SandboxedEnvironment with StrictUndefined, and emitted as exactly the params shape the gateway's POST endpoint takes. Four distinct failures each name what failed: an uncoercible value, an undefined variable, a sandbox escape attempt, and a required variable declared with a default.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="55%" stop-color="#171429"/>
+      <stop offset="100%" stop-color="#120f22"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#a371f7"/>
+      <stop offset="50%" stop-color="#4c8dff"/>
+      <stop offset="100%" stop-color="#39d3bb"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8b98a9"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="528" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1200" height="4" fill="url(#accent)"/>
+  <text x="40" y="56" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="24" font-weight="700" fill="#e6edf3">from a file in git to a request on the wire</text>
+  <text x="40" y="84" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="14.5" fill="#8b98a9">one pass, four ways to fail loudly - and none of them is a silently-empty string in a prompt</text>
+    <rect x="40" y="126" width="200" height="70" rx="12" fill="#131a26" stroke="#8b98a9" stroke-width="1.6"/>
+    <text x="140" y="157" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#8b98a9">hero.v3.yaml</text>
+    <text x="140" y="177" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#8b98a9">checked into your repo</text>
+    <rect x="40" y="214" width="200" height="70" rx="12" fill="#131a26" stroke="#8b98a9" stroke-width="1.6"/>
+    <text x="140" y="245" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#8b98a9">--var width=512</text>
+    <text x="140" y="265" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#8b98a9">always arrives a string</text>
+    <path d="M240 161 L306 186" stroke="#8b98a9" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <path d="M240 249 L306 224" stroke="#8b98a9" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <rect x="306" y="158" width="190" height="94" rx="12" fill="#131a26" stroke="#6cb6ff" stroke-width="1.6"/>
+    <text x="401" y="201" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#6cb6ff">coerce</text>
+    <text x="401" y="221" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#8b98a9">to the declared type</text>
+    <path d="M496 205 L562 205" stroke="#8b98a9" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <rect x="562" y="158" width="240" height="94" rx="12" fill="#131a26" stroke="#b394f7" stroke-width="1.6"/>
+    <text x="682" y="201" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#b394f7">SandboxedEnvironment</text>
+    <text x="682" y="221" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#8b98a9">undefined=StrictUndefined</text>
+    <path d="M802 205 L868 205" stroke="#8b98a9" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <rect x="868" y="158" width="292" height="94" rx="12" fill="#131a26" stroke="#3fb950" stroke-width="1.6"/>
+    <text x="1014" y="201" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#3fb950">params</text>
+    <text x="1014" y="221" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#8b98a9">exactly the shape POST /v1/{cap} takes</text>
+  <path d="M401 252 L401 300" stroke="#f2777a" stroke-width="1.6" stroke-dasharray="5 4" fill="none"/>
+  <path d="M682 252 L682 300" stroke="#f2777a" stroke-width="1.6" stroke-dasharray="5 4" fill="none"/>
+    <rect x="40" y="316" width="1120" height="182" rx="14" fill="#131a26" stroke="#f2777a" stroke-width="1.6"/>
+    <text x="62" y="348" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#f2777a">every failure names the thing that failed</text>
+    <path d="M62 360 L1138 360" stroke="#26324a" stroke-width="1"/>
+    <circle cx="70" cy="381" r="3.5" fill="#f2777a"/>
+    <text x="86" y="386" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#e6edf3">width=not-a-number  ->  render-time error naming the variable and the value it could not coerce</text>
+    <circle cx="70" cy="411" r="3.5" fill="#f2777a"/>
+    <text x="86" y="416" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#e6edf3">{{ subjekt }} with no such variable  ->  StrictUndefined raises, instead of rendering an empty string</text>
+    <circle cx="70" cy="441" r="3.5" fill="#f2777a"/>
+    <text x="86" y="446" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#e6edf3">{{ ''.__class__.__mro__[1].__subclasses__() }}  ->  blocked by the sandbox, surfaced as a TemplateError</text>
+    <circle cx="70" cy="471" r="3.5" fill="#f2777a"/>
+    <text x="86" y="476" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" fill="#e6edf3">required: true together with a default:  ->  rejected at model level, not silently resolved one way</text>
+</svg>
