@@ -33,6 +33,44 @@ variables:
 """
 
 
+OPTIONAL = """
+name: photo
+version: "1"
+capability: image
+params:
+  prompt: "a {{ style }} photo"
+  seed: "${seed}"
+variables:
+  style:
+    type: string
+  seed:
+    type: integer
+"""
+
+
+def test_an_unset_optional_renders_as_nothing_not_the_word_none():
+    """A declared-but-unset optional had been resolving to Python ``None``,
+    which Jinja stringifies: "a {{ style }} photo" came out as "a None
+    photo" - a word the user never wrote, silently sent to the model."""
+    template = load_template_str(OPTIONAL)
+    rendered = render_template(template, {})
+    assert rendered["prompt"] == "a  photo"
+    assert "None" not in rendered["prompt"]
+
+
+def test_an_unset_optional_is_still_null_in_a_typed_slot():
+    """``${seed}`` substitutes the typed value, so an unset optional stays a
+    real null rather than becoming an empty string."""
+    template = load_template_str(OPTIONAL)
+    assert render_template(template, {})["seed"] is None
+
+
+def test_a_supplied_optional_renders_normally():
+    template = load_template_str(OPTIONAL)
+    rendered = render_template(template, {"style": "candid", "seed": "7"})
+    assert rendered == {"prompt": "a candid photo", "seed": 7}
+
+
 def test_render_uses_defaults_when_no_overrides():
     template = load_template_str(BASIC)
     rendered = render_template(template, {})

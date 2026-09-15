@@ -36,11 +36,6 @@ dependencies = [
     "httpx>=0.28.1",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=9.1.1",
-]
-
 [project.scripts]
 ptm = "prompt_template_manager.cli:main"
 
@@ -54,7 +49,7 @@ packages = ["src/prompt_template_manager"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=9.1.1",
 ]

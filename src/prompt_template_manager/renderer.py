@@ -119,6 +119,20 @@ def resolve_variables(template: Template, overrides: dict[str, Any]) -> dict[str
     return resolved
 
 
+def _jinja_context(resolved_vars: dict[str, Any]) -> dict[str, Any]:
+    """The render context for string interpolation.
+
+    A declared-but-unset optional resolves to ``None``, which is the honest
+    typed value for a ``${var}`` slot. Handed to Jinja, though, ``None``
+    stringifies: ``"a {{ style }} photo"`` came out as ``"a None photo"`` -
+    a word the user never wrote, silently sent on to the model. Inside a
+    string an unset optional contributes nothing, so it renders as empty.
+    ``StrictUndefined`` is untouched: a *typo'd* name is still an error,
+    because it never reaches this dict at all.
+    """
+    return {name: ("" if value is None else value) for name, value in resolved_vars.items()}
+
+
 def render_value(value: Any, resolved_vars: dict[str, Any]) -> Any:
     if isinstance(value, dict):
         return {k: render_value(v, resolved_vars) for k, v in value.items()}
@@ -132,7 +146,7 @@ def render_value(value: Any, resolved_vars: dict[str, Any]) -> Any:
                 raise TemplateError(f"params reference undeclared variable '${{{var_name}}}'")
             return resolved_vars[var_name]
         try:
-            return _jinja_env.from_string(value).render(**resolved_vars)
+            return _jinja_env.from_string(value).render(**_jinja_context(resolved_vars))
         except TemplateSyntaxError as exc:
             # Without this, a malformed template ({{ foo, {% if %}) walked a
             # raw Jinja traceback out through the CLI - the same bug class

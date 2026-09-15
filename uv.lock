@@ -193,18 +193,13 @@ wheels = [
 ]
 
 [[package]]
-name = "prompt-template-manager"
+name = "ptm-cli"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "jinja2" },
     { name = "pyyaml" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
 ]
 
 [package.dev-dependencies]
@@ -214,15 +209,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "jinja2", specifier = ">=3.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.3.0" }]
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "pygments"
