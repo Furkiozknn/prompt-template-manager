@@ -14,6 +14,19 @@ Generation prompts tend to end up in one of two bad places: buried as string lit
 
 `ptm render` outputs exactly the params shape [`ai-job-gateway`](https://github.com/Furkiozknn/ai-job-gateway) expects for `POST /v1/{capability}` — the two are decoupled (no Python import between them, only the documented HTTP contract), but `ptm submit` closes the loop directly.
 
+## Install
+
+The distribution is named **`ptm-cli`**; the command it installs is `ptm` and
+the import package is `prompt_template_manager`.
+
+```bash
+uv tool install ptm-cli    # or: pipx install ptm-cli, pip install ptm-cli
+ptm --help
+```
+
+To work from a checkout instead, see [Quickstart](#quickstart) below — `uv sync`
+installs this project in place and `uv run ptm` runs it.
+
 ## Quickstart
 
 ```bash
@@ -174,7 +187,7 @@ uv sync --group dev
 uv run pytest
 ```
 
-The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 58 tests (`uv run pytest --collect-only -q` prints the current count).
+The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 61 tests (`uv run pytest --collect-only -q` prints the current count).
 
 ## Limitations
 
