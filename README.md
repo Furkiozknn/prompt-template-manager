@@ -212,6 +212,23 @@ Being upfront about what this is *not*:
 - `submit`'s HTTP client is synchronous — it's a CLI convenience for one-off submission, not a library meant for embedding in an async application.
 - Sandboxing mitigates Jinja2-level code execution; it is not a content/output filter and does not vet what a rendered prompt sends to the downstream model.
 
+### `gateway_poll.py` is not ours
+
+That module is copied verbatim from
+[ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway), which owns the submit/poll
+contract. Copying is deliberate — this project does not have to depend on the gateway — but
+copies drift in silence: an edge case fixed upstream keeps biting here, and this repository
+stays green against its own stale copy the whole time.
+
+```sh
+python3 arac/vendor-dogrula.py
+```
+
+It fetches the canonical file from `main`, normalises the package-name difference and fails on
+anything else, printing the diff. With no network it **skips rather than passes** — "I could
+not look" and "they are identical" are different facts, and a gate that conflates them is not
+a gate. CI runs it on every push.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
