@@ -16,13 +16,23 @@ Generation prompts tend to end up in one of two bad places: buried as string lit
 
 ## Install
 
-The distribution is named **`ptm-cli`**; the command it installs is `ptm` and
-the import package is `prompt_template_manager`.
+The distribution is named **`ptm-cli`**, the command it installs is `ptm`, and
+the import package is `prompt_template_manager`. **It is not on PyPI yet**, so
+install it from this repository — both of these work today:
 
 ```bash
-uv tool install ptm-cli    # or: pipx install ptm-cli, pip install ptm-cli
+# Run it without installing anything:
+uvx --from git+https://github.com/Furkiozknn/prompt-template-manager ptm --help
+
+# Or install the `ptm` command itself:
+uv tool install git+https://github.com/Furkiozknn/prompt-template-manager
 ptm --help
 ```
+
+Once `ptm-cli` is published, `uv tool install ptm-cli` (or `pipx install
+ptm-cli`, or `pip install ptm-cli`) will be the shorter route. Until then those
+commands fail with *"ptm-cli was not found in the package registry"*, which is
+why they are not the instruction above.
 
 To work from a checkout instead, see [Quickstart](#quickstart) below — `uv sync`
 installs this project in place and `uv run ptm` runs it.
