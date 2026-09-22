@@ -6,6 +6,10 @@
 
 Versioned, git-diffable prompt/pipeline templates for generative-AI requests, rendered by a strict, sandboxed engine and driven by a small CLI (`ptm`).
 
+![ptm validating and describing examples/product-photo.yaml: the template checks out, and its capability, variables, types and defaults are printed from the file itself](assets/demo.gif)
+
+<sub>Real output from <code>examples/product-photo.yaml</code>, a template in this repository.</sub>
+
 ## The problem this solves
 
 Generation prompts tend to end up in one of two bad places: buried as string literals in application code (so changing a prompt means a code review and a deploy), or stashed as opaque rows in some internal "prompt management" database (so `git blame` and `git diff` — the tools you already trust for reviewing every other change to your system — can't see them at all).
