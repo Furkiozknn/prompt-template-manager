@@ -97,7 +97,7 @@ params:
 Two substitution forms, both deliberate:
 
 - **`{{ variable }}`** — ordinary [Jinja2](https://jinja.palletsprojects.com/) string interpolation, for building up prose like a prompt. Strict by design: a typo'd variable name fails the render immediately instead of silently rendering as an empty string.
-- **`"${variable}"`** (a param value that is *exactly* this, nothing else) — direct substitution of the variable's typed value. Use this for non-string params (`width`, `seed`, a boolean flag) so an integer variable stays an integer instead of getting stringified by Jinja.
+- **`"${variable}"`** (a param value that is *exactly* this, nothing else) — direct substitution of the variable's typed value. Use this for non-string params (`width`, `seed`, a boolean flag) so an integer variable stays an integer instead of getting stringified by Jinja. Inside a longer string (`"${width}px"`) it is *not* substituted and would reach the model literally, so `ptm validate` warns about it — use `{{ width }}px` there.
 
 Everything else — a plain number, a plain string with no template syntax, a boolean — passes through as a literal, untouched.
 
@@ -116,7 +116,10 @@ ptm validate templates/*.yaml
 ```
 
 - **Hard error** if `params` references a variable (via either `{{ }}` or `${}`) that isn't declared in `variables`. This is a real bug — the render would fail the moment someone actually calls it.
+- **Hard error** if a `default:` can't be converted to its declared `type` (`type: integer, default: big`) — every render relying on that default would fail.
+- **Hard error** for a file that can't be read (a directory, a binary file) — reported as `INVALID` like any other problem, and the remaining files are still checked.
 - **Warning** for a variable that's declared but never referenced anywhere in `params` — almost certainly dead, worth a second look, but not broken.
+- **Warning** for a `${variable}` that is only part of a string, since it is sent literally.
 - Exits non-zero if *any* file is invalid, with a summary line when checking more than one — designed to drop straight into CI (`ptm validate templates/*.yaml` as a pre-merge check, no shell loop required).
 
 ### `render`
@@ -151,6 +154,8 @@ A quick human-readable summary of a template's variables, types, and defaults �
 ### `submit`
 
 `render` + `POST` to `{gateway-url}/v1/{capability}` + poll until ready, using the [same submit/poll contract `ai-job-gateway` implements](https://github.com/Furkiozknn/ai-job-gateway) (works against any server implementing that contract, not only that specific repo). Accepts the same `--var` / `--vars-file` flags as `render`.
+
+Every failure exits `1` with a one-line `error:` instead of a traceback: an unreachable gateway, a rejected submission, a job that ends in `error` or expires, a timeout, or a server that answers with something other than the documented submit/poll JSON. The template's `capability` is used as a single URL path segment (letters, digits, `_`, `-`, `.`), so a template can't redirect the request to another endpoint with `../`.
 
 ## Using it as a library
 
@@ -201,7 +206,7 @@ uv sync --group dev
 uv run pytest
 ```
 
-The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 61 tests (`uv run pytest --collect-only -q` prints the current count).
+The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 99 tests (`uv run pytest --collect-only -q` prints the current count).
 
 ## Limitations
 
