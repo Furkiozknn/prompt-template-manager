@@ -36,6 +36,12 @@ dependencies = [
     "httpx>=0.28.1",
 ]
 
+[project.urls]
+Homepage = "https://furkiozknn.github.io/#prompt-template-manager"
+Repository = "https://github.com/Furkiozknn/prompt-template-manager"
+Issues = "https://github.com/Furkiozknn/prompt-template-manager/issues"
+Changelog = "https://github.com/Furkiozknn/prompt-template-manager/blob/main/CHANGELOG.md"
+
 [project.scripts]
 ptm = "prompt_template_manager.cli:main"
 
@@ -43,8 +49,16 @@ ptm = "prompt_template_manager.cli:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# Current hatchling (1.32.4 checked) defaults to core metadata 2.5, which twine (6.2.0) rejects
+# as "not a valid metadata version" -- the `twine check` step in yayinla.yml
+# failed on an unchanged tree. 2.4 carries everything this package declares
+# (License-Expression, License-File).
+[tool.hatch.build.targets.sdist]
+core-metadata-version = "2.4"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/prompt_template_manager"]
+core-metadata-version = "2.4"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
