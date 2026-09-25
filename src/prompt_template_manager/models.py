@@ -22,7 +22,7 @@ ALLOWED_VARIABLE_TYPES = ("string", "integer", "float", "boolean")
 # request at a different endpoint of the gateway. ai-job-gateway itself
 # accepts [A-Za-z0-9_-]; "." is allowed here (not as the first character)
 # for other servers implementing the same contract.
-_CAPABILITY_RE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$")
+_CAPABILITY_RE = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}")
 
 
 class TemplateError(Exception):
@@ -68,7 +68,7 @@ class Template:
         if missing:
             raise TemplateError(f"template missing required field(s): {', '.join(missing)}")
         capability = data["capability"]
-        if not isinstance(capability, str) or not _CAPABILITY_RE.match(capability):
+        if not isinstance(capability, str) or not _CAPABILITY_RE.fullmatch(capability):
             raise TemplateError(
                 f"'capability' must be a single URL path segment "
                 f"(letters, digits, '_', '-', '.'; not starting with '.'), got {capability!r}"

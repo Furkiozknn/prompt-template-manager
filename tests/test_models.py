@@ -79,7 +79,7 @@ def test_required_boolean_still_accepted():
     assert template.variables["v"].required is False
 
 
-@pytest.mark.parametrize("capability", ["../admin", "a/b", "echo?x=1", "", ".", "..", "has space", 123, None])
+@pytest.mark.parametrize("capability", ["../admin", "a/b", "echo?x=1", "", ".", "..", "has space", "echo\n", 123, None])
 def test_capability_must_be_a_single_url_path_segment(capability):
     # It is interpolated into {gateway-url}/v1/{capability}; a third-party
     # template must not be able to point `ptm submit` at another endpoint.
