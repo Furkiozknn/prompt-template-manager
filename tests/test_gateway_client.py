@@ -158,3 +158,80 @@ def test_all_gateway_errors_share_a_base_class():
     for cls in (GatewaySubmissionError, GatewayJobFailedError, GatewayJobTimeoutError,
                 GatewayConnectionError, GatewayResponseError):
         assert issubclass(cls, GatewayError)
+
+
+# --- Phase 3: the gateway URL and the polling_url it hands back -------------
+
+
+def _submitting(polling_url, seen):
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url)
+        if request.method == "POST":
+            return httpx.Response(202, json={"id": "job-1", "polling_url": polling_url})
+        return httpx.Response(200, json={"status": "ready", "result": {"ok": True}})
+
+    return handler
+
+
+@pytest.mark.parametrize(
+    "polling_url",
+    ["@evil.test/x", "//evil.test/x", "http://evil.test/x", "x/y", ""],
+)
+def test_polling_url_cannot_move_the_poll_to_another_host(polling_url):
+    # base + "@evil.test/x" is "http://gateway.test@evil.test/x": the poll
+    # went to evil.test, and with credentials in --gateway-url they went too.
+    seen: list[httpx.URL] = []
+    with pytest.raises(GatewayResponseError, match="polling_url"):
+        submit_and_wait(
+            "http://user:pw@gateway.test", "echo", {}, poll_interval=0,
+            http_client=_client_for(_submitting(polling_url, seen)),
+        )
+    assert [u.host for u in seen] == ["gateway.test"]
+
+
+def test_non_string_polling_url_is_a_response_error_not_type_error():
+    with pytest.raises(GatewayResponseError, match="polling_url"):
+        submit_and_wait(
+            "http://gateway.test", "echo", {}, poll_interval=0,
+            http_client=_client_for(_submitting(123, [])),
+        )
+
+
+def test_polling_url_with_query_string_is_still_accepted():
+    seen: list[httpx.URL] = []
+    result = submit_and_wait(
+        "http://gateway.test/prefix", "echo", {}, poll_interval=0,
+        http_client=_client_for(_submitting("/v1/jobs/1?wait=1", seen)),
+    )
+    assert result == {"ok": True}
+    assert str(seen[1]) == "http://gateway.test/prefix/v1/jobs/1?wait=1"
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["localhost:8000", "http://", "ftp://gateway.test", "not a url", "http://gateway.test/?x=1", "http://gateway.test/#f"],
+)
+def test_invalid_gateway_url_is_rejected_before_any_request(url):
+    seen: list[httpx.URL] = []
+    with pytest.raises(GatewayError, match="invalid gateway URL"):
+        submit_and_wait(url, "echo", {}, http_client=_client_for(_submitting("/v1/jobs/1", seen)))
+    assert seen == []
+
+
+def test_credentials_in_gateway_url_never_appear_in_error_messages():
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with pytest.raises(GatewayConnectionError) as exc_info:
+        submit_and_wait("http://alice:s3cret@gateway.test:9", "echo", {}, http_client=_client_for(refuse))
+    message = str(exc_info.value)
+    assert "s3cret" not in message
+    assert "gateway.test:9" in message
+
+
+def test_non_transport_request_error_is_a_gateway_error():
+    def broken(request: httpx.Request) -> httpx.Response:
+        raise httpx.DecodingError("bad gzip", request=request)
+
+    with pytest.raises(GatewayError):
+        submit_and_wait("http://gateway.test", "echo", {}, http_client=_client_for(broken))

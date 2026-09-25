@@ -56,6 +56,56 @@ class GatewayResponseError(GatewayError):
     missing the fields the contract promises."""
 
 
+def _redact(url: httpx.URL) -> str:
+    """The URL as it may appear in a message: never with its password."""
+    return str(url.copy_with(username=None, password=None)).rstrip("/") if url.userinfo else str(url).rstrip("/")
+
+
+def _parse_gateway_url(gateway_url: str) -> httpx.URL:
+    """Reject anything that is not a plain http(s) base URL up front.
+
+    Without this, "localhost:8000" or "http://" surfaced as a confusing
+    "could not reach gateway" and a query string or fragment silently
+    swallowed the /v1/{capability} path appended after it.
+    """
+    try:
+        url = httpx.URL(gateway_url)
+    except (httpx.InvalidURL, TypeError) as exc:
+        raise GatewayError(f"invalid gateway URL {gateway_url!r}: {exc}") from exc
+    problem = None
+    if url.scheme not in ("http", "https"):
+        problem = "it must start with http:// or https://"
+    elif not url.host:
+        problem = "it has no host"
+    elif url.query or url.fragment or "?" in gateway_url or "#" in gateway_url:
+        problem = "it must not contain a query string or fragment"
+    if problem:
+        shown = _redact(url) if url.host else gateway_url.split("@")[-1]
+        raise GatewayError(f"invalid gateway URL {shown!r}: {problem}")
+    return url
+
+
+def _checked_polling_url(base: httpx.URL, base_url: str, polling_url: Any) -> str:
+    """The gateway returns polling_url as a path to append to the base URL.
+    A server that returns anything else - "@other.host/x", "//other.host",
+    a full URL - would move the poll (and any credentials in the base URL)
+    to a different host, so only a same-origin absolute path is accepted."""
+    if not isinstance(polling_url, str) or not polling_url.startswith("/") or polling_url.startswith("//"):
+        raise GatewayResponseError(
+            f"submission response has an unusable polling_url {polling_url!r} (expected a path starting with '/')"
+        )
+    full = resolve_polling_url(base_url, polling_url)
+    try:
+        target = httpx.URL(full)
+    except httpx.InvalidURL as exc:
+        raise GatewayResponseError(f"submission response has an unusable polling_url {polling_url!r}: {exc}") from exc
+    if (target.scheme, target.host, target.port, target.userinfo) != (base.scheme, base.host, base.port, base.userinfo):
+        raise GatewayResponseError(
+            f"submission response's polling_url {polling_url!r} points away from the gateway; refusing to follow it"
+        )
+    return full
+
+
 def _json_or_raise(response: httpx.Response, stage: str) -> Any:
     try:
         return response.json()
@@ -81,6 +131,8 @@ def submit_and_wait(
     for embedding in an async application (use the gateway's own client for
     that).
     """
+    base = _parse_gateway_url(gateway_url)
+    shown_url = _redact(base)
     client = http_client or httpx.Client()
     owns_client = http_client is None
     base_url = gateway_url.rstrip("/")
@@ -98,10 +150,11 @@ def submit_and_wait(
                 f"submission response is missing {exc.args[0]!r}: {body_json!r}"
             ) from exc
         del job_id  # this client's public contract only ever returns the result, not the id
+        poll_url = _checked_polling_url(base, base_url, polling_url)
 
         deadline = time.monotonic() + timeout
         while True:
-            poll_response = client.get(resolve_polling_url(base_url, polling_url))
+            poll_response = client.get(poll_url)
             if is_expired_poll_response(poll_response.status_code):
                 try:
                     detail_body = poll_response.json()
@@ -128,7 +181,10 @@ def submit_and_wait(
                 )
             time.sleep(poll_interval)
     except httpx.TransportError as exc:
-        raise GatewayConnectionError(f"could not reach gateway at {base_url}: {exc}") from exc
+        raise GatewayConnectionError(f"could not reach gateway at {shown_url}: {exc}") from exc
+    except httpx.RequestError as exc:
+        # Decoding errors, redirect loops: the gateway answered, but badly.
+        raise GatewayResponseError(f"request to gateway at {shown_url} failed: {exc}") from exc
     finally:
         if owns_client:
             client.close()
