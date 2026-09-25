@@ -6,6 +6,10 @@
 
 Versioned, git-diffable prompt/pipeline templates for generative-AI requests, rendered by a strict, sandboxed engine and driven by a small CLI (`ptm`).
 
+![ptm validating and describing examples/product-photo.yaml: the template checks out, and its capability, variables, types and defaults are printed from the file itself](assets/demo.gif)
+
+<sub>Real output from <code>examples/product-photo.yaml</code>, a template in this repository.</sub>
+
 ## The problem this solves
 
 Generation prompts tend to end up in one of two bad places: buried as string literals in application code (so changing a prompt means a code review and a deploy), or stashed as opaque rows in some internal "prompt management" database (so `git blame` and `git diff` — the tools you already trust for reviewing every other change to your system — can't see them at all).
@@ -16,13 +20,23 @@ Generation prompts tend to end up in one of two bad places: buried as string lit
 
 ## Install
 
-The distribution is named **`ptm-cli`**; the command it installs is `ptm` and
-the import package is `prompt_template_manager`.
+The distribution is named **`ptm-cli`**, the command it installs is `ptm`, and
+the import package is `prompt_template_manager`. **It is not on PyPI yet**, so
+install it from this repository — both of these work today:
 
 ```bash
-uv tool install ptm-cli    # or: pipx install ptm-cli, pip install ptm-cli
+# Run it without installing anything:
+uvx --from git+https://github.com/Furkiozknn/prompt-template-manager ptm --help
+
+# Or install the `ptm` command itself:
+uv tool install git+https://github.com/Furkiozknn/prompt-template-manager
 ptm --help
 ```
+
+Once `ptm-cli` is published, `uv tool install ptm-cli` (or `pipx install
+ptm-cli`, or `pip install ptm-cli`) will be the shorter route. Until then those
+commands fail with *"ptm-cli was not found in the package registry"*, which is
+why they are not the instruction above.
 
 To work from a checkout instead, see [Quickstart](#quickstart) below — `uv sync`
 installs this project in place and `uv run ptm` runs it.
@@ -198,6 +212,34 @@ Being upfront about what this is *not*:
 - `submit`'s HTTP client is synchronous — it's a CLI convenience for one-off submission, not a library meant for embedding in an async application.
 - Sandboxing mitigates Jinja2-level code execution; it is not a content/output filter and does not vet what a rendered prompt sends to the downstream model.
 
+### `gateway_poll.py` is not ours
+
+That module is copied verbatim from
+[ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway), which owns the submit/poll
+contract. Copying is deliberate — this project does not have to depend on the gateway — but
+copies drift in silence: an edge case fixed upstream keeps biting here, and this repository
+stays green against its own stale copy the whole time.
+
+```sh
+python3 arac/vendor-dogrula.py
+```
+
+It fetches the canonical file from `main`, normalises the package-name difference and fails on
+anything else, printing the diff. With no network it **skips rather than passes** — "I could
+not look" and "they are identical" are different facts, and a gate that conflates them is not
+a gate. CI runs it on every push.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+## More from this ecosystem
+
+- **[ai-job-gateway](https://github.com/Furkiozknn/ai-job-gateway)** — the async job contract the rest of the pipeline speaks
+- **[ai-workflow-engine](https://github.com/Furkiozknn/ai-workflow-engine)** — pipelines as plain YAML DAGs, validated before they run
+- **[model-comparison-harness](https://github.com/Furkiozknn/model-comparison-harness)** — one request, N backends, latency and outcome side by side
+- **[mcp-vet](https://github.com/Furkiozknn/mcp-vet)** — audits an MCP server's source before you install it
+
+<sub>All of them in one searchable page: **[furkiozknn.github.io](https://furkiozknn.github.io/)** — each card is generated from that repository's own <code>project-meta.json</code>.</sub>
