@@ -42,6 +42,18 @@ jobs:
           uv run ptm validate examples/*.yaml
           uv run ptm info examples/product-photo.yaml
           uv run ptm render examples/product-photo.yaml --var product_name="a red sneaker" --pretty
+          # README'deki cikis kodu sozlesmesi: sablon hatasi 1, kullanim hatasi 2.
+          kod=0; uv run ptm render examples/product-photo.yaml || kod=$?
+          test "$kod" -eq 1
+          kod=0; uv run ptm submit examples/product-photo.yaml --gateway-url http://x --timeout nan || kod=$?
+          test "$kod" -eq 2
+
+      # README'deki terminal gorseli gercek ciktidan uretiliyor; kod degisip
+      # gorsel eskirse burada kirmiziya doner.
+      - name: fails-loudly.svg guncel mi
+        run: |
+          uv run python arac/terminal-svg.py
+          git diff --exit-code assets/fails-loudly.svg
 
   # yayinla.yml ile ayni paketleme adimlari, ama her push'ta: paket
   # meta verisi bozulursa bunu etiket atildiginda degil, PR'da gormek icin.

@@ -41,6 +41,51 @@ why they are not the instruction above.
 To work from a checkout instead, see [Quickstart](#quickstart) below — `uv sync`
 installs this project in place and `uv run ptm` runs it.
 
+## Your first template (one minute, no checkout needed)
+
+With `ptm` installed as above, write a template anywhere:
+
+```bash
+cat > hello.yaml <<'EOF'
+name: hello
+version: "1"
+capability: mock-generate
+variables:
+  subject:
+    type: string
+    required: true
+  steps:
+    type: integer
+    default: 30
+params:
+  prompt: "a studio photo of {{ subject }}, soft light"
+  steps: "${steps}"
+EOF
+
+ptm validate hello.yaml
+# OK: hello v1 (hello.yaml)
+
+ptm render hello.yaml --var subject="a red sneaker" --pretty
+# {
+#   "prompt": "a studio photo of a red sneaker, soft light",
+#   "steps": 30
+# }
+```
+
+`steps` came out as the integer `30`, not the string `"30"`. Now make a mistake
+on purpose — every one of these is a one-line `error:` and exit code 1, never a
+blank in the prompt:
+
+```bash
+ptm render hello.yaml                                  # error: missing required variable(s): 'subject' ...
+ptm render hello.yaml --var subjcet=x                  # error: unknown variable(s) passed: 'subjcet' (did you mean 'subject'?) ...
+ptm render hello.yaml --var subject=x --var steps=many # error: variable 'steps': cannot convert 'many' to integer
+```
+
+<img src="assets/fails-loudly.svg" alt="Real ptm output: a render that succeeds and prints JSON, a typo in a variable name caught with a did-you-mean suggestion and exit 1, and a template that tries to escape the Jinja sandbox refused with exit 1." width="100%">
+
+<sub>Generated from real runs by <code>arac/terminal-svg.py</code>; nothing in it is typed by hand.</sub>
+
 ## Quickstart
 
 ```bash
@@ -147,6 +192,15 @@ For templates with more than a couple of variables, `--vars-file path/to/vars.ya
 ptm render templates/photo.yaml --vars-file prod-run.yaml --pretty
 ```
 
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | success (`validate`: every file is valid; warnings do not fail) |
+| `1` | a template, vars-file or gateway problem, printed as one `error:` / `INVALID:` line on stderr |
+| `2` | bad command-line usage (unknown option, missing argument, `--timeout` that is not a positive number) |
+| `130` | interrupted with Ctrl+C |
+
 ### `info`
 
 A quick human-readable summary of a template's variables, types, and defaults — useful before filling in `--var` flags by hand.
@@ -155,7 +209,14 @@ A quick human-readable summary of a template's variables, types, and defaults �
 
 `render` + `POST` to `{gateway-url}/v1/{capability}` + poll until ready, using the [same submit/poll contract `ai-job-gateway` implements](https://github.com/Furkiozknn/ai-job-gateway) (works against any server implementing that contract, not only that specific repo). Accepts the same `--var` / `--vars-file` flags as `render`.
 
-Every failure exits `1` with a one-line `error:` instead of a traceback: an unreachable gateway, a rejected submission, a job that ends in `error` or expires, a timeout, or a server that answers with something other than the documented submit/poll JSON. The template's `capability` is used as a single URL path segment (letters, digits, `_`, `-`, `.`), so a template can't redirect the request to another endpoint with `../`.
+Every failure exits `1` with a one-line `error:` instead of a traceback: an unreachable gateway, a rejected submission, a job that ends in `error` or expires, a timeout, or a server that answers with something other than the documented submit/poll JSON.
+
+What `submit` checks before and while it talks to the network:
+
+- `--gateway-url` must be a plain `http://` or `https://` base URL with a host and no query string or fragment (`localhost:8000` is rejected with a message saying so, not reported as unreachable).
+- The template's `capability` is used as a single URL path segment (letters, digits, `_`, `-`, `.`), so a template can't redirect the request to another endpoint with `../`.
+- The `polling_url` the gateway hands back must be a path on the same host. A response such as `"polling_url": "@other.host/x"` would otherwise have turned `http://gateway` + that string into a request to `other.host`; it is refused instead.
+- A username or password in `--gateway-url` is never printed in an error message.
 
 ## Using it as a library
 
@@ -193,11 +254,30 @@ permitted, see README Security section)
 
 This was a drop-in change with **no observed behavior difference** for legitimate templates: every template in this repo's test suite and examples only does plain `{{ var }}` interpolation and built-in filters, none of which the sandbox restricts. If you have a template relying on attribute access into a passed-in object (not currently possible via this CLI, since `--var`/`--vars-file` only ever produce plain strings, ints, floats, and bools — never rich objects), that's exactly the pattern the sandbox exists to catch.
 
+Beyond object access, loading and rendering also refuse input that would crash or stall the process instead of failing cleanly:
+
+- `params` must be plain JSON: string keys, strings, finite numbers, booleans, null, lists, mappings. An unquoted `2024-01-01` (YAML reads it as a date), `!!binary`, or `.nan` is a template error that tells you to quote it.
+- YAML aliases are allowed, but `params` may expand to at most 10,000 values and 32 levels. A few hundred bytes of nested `*alias` references (an "alias bomb") or an alias that refers to itself is rejected at load time rather than hanging `validate`.
+- In `{{ }}` expressions, `**` and repetition with `*` are bounded: `{{ 10 ** (10 ** 9) }}` or `{{ 'a' * 3000000000 }}` is refused as an unsafe operation. Other runtime errors (`{{ 1/0 }}`, `{{ 'a' + 1 }}`) are reported as `error while rendering ...`.
+
 **Honest limits of this mitigation, stated plainly:**
+
+- The sandbox does not cap CPU time. Two nested `{% for %}` loops over `range(100000)` will spin for a very long time. If you render templates you have not read, put a time limit around the process: `timeout 10 ptm render untrusted.yaml` (exit code 124 when it trips).
 
 - Jinja2's own docs, and multiple public CVEs against other tools, note that sandbox *escapes* have existed historically — treat this as defense-in-depth, not a hard guarantee. The truly safe stance is to never render a template you don't trust at all, sandboxed or not.
 - The sandbox constrains the Jinja2 evaluation itself. It does not, and cannot, vet the *content* a rendered prompt sends onward (e.g. a prompt-injection payload aimed at the downstream model) — that's a different, model-facing risk this tool has no visibility into.
 - `${variable}` direct substitution never touches Jinja2 at all (it's a regex match + dict lookup), so it carries none of this risk in either direction — it's already about as safe as substitution gets.
+
+## Troubleshooting
+
+| Message | What it means |
+|---|---|
+| `params.when: YAML read datetime.date(...) as a date, which JSON cannot carry - quote it` | YAML turned an unquoted value into a non-JSON type. Write `when: "2024-01-01"`. |
+| `warning: param 'prompt': '${width}' is only part of the string, so it is sent literally` | `${var}` works only as the whole value. Inside text, use `{{ width }}`. |
+| `'capability' must be a single URL path segment` | `capability` becomes `/v1/{capability}`; no `/`, `?`, `#`, spaces, or leading `.`. |
+| `'required' must be true or false (unquoted)` | `required: "false"` is a string; YAML booleans are unquoted. |
+| `invalid gateway URL 'localhost:8000': it must start with http:// or https://` | Pass the full base URL: `--gateway-url http://localhost:8000`. |
+| `could not reach gateway at http://...` | Nothing is listening there, or DNS/TLS failed. Is the gateway running on that port? |
 
 ## Development
 
@@ -206,7 +286,9 @@ uv sync --group dev
 uv run pytest
 ```
 
-The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 100 tests (`uv run pytest --collect-only -q` prints the current count).
+The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 150 tests (`uv run pytest --collect-only -q` prints the current count). `tests/test_untrusted_input.py` holds the hostile-template cases: dates, NaN, alias bombs, self-referencing aliases, oversized `**`/`*`.
+
+`assets/fails-loudly.svg` is regenerated from real runs with `uv run python arac/terminal-svg.py`.
 
 ## Limitations
 

@@ -32,7 +32,7 @@
     "sandbox",
     "version-control"
   ],
-  "summary": "Your prompts deserve git diff, not a database row. Templates as plain YAML, rendered through Jinja's SandboxedEnvironment with StrictUndefined so a typo'd variable fails loudly instead of rendering blank - plus a ${var} form that keeps an integer an integer instead of stringifying it. CLI: ptm. 100 tests.",
+  "summary": "Your prompts deserve git diff, not a database row. Templates as plain YAML, rendered through Jinja's SandboxedEnvironment with StrictUndefined so a typo'd variable fails loudly instead of rendering blank - plus a ${var} form that keeps an integer an integer instead of stringifying it. CLI: ptm. 150 tests.",
   "key_features": [
     "Templates as plain YAML, so a prompt change is a diff in a pull request rather than a database row",
     "Rendered through Jinja's SandboxedEnvironment with StrictUndefined: a typo'd variable fails loudly instead of rendering blank",
@@ -41,15 +41,17 @@
   ],
   "media": {
     "hero": "assets/banner.svg",
-    "screenshots": [],
+    "screenshots": [
+      "assets/fails-loudly.svg"
+    ],
     "gifs": [
       "assets/demo.gif"
     ],
     "videos": []
   },
   "tests": {
-    "count": 100,
-    "source": "`100 passed`",
+    "count": 150,
+    "source": "`150 passed`",
     "measured": "2026-09-25"
   },
   "ci": {
