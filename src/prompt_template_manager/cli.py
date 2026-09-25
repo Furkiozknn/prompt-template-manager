@@ -134,7 +134,15 @@ def _cmd_submit(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="ptm", description="prompt-template-manager")
+    parser = argparse.ArgumentParser(
+        prog="ptm",
+        description="Versioned, git-diffable prompt templates: validate, render and submit YAML templates.",
+        epilog=(
+            "example: ptm render prompt.yaml --var subject='a red sneaker' --pretty\n"
+            "exit codes: 0 ok, 1 template/gateway error, 2 bad command-line usage, 130 interrupted"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
