@@ -179,3 +179,54 @@ def test_submit_happy_path(monkeypatch, capsys, template_file):
     _run(monkeypatch, ["submit", str(template_file), "--gateway-url", "http://gateway.test"])
     out = capsys.readouterr().out
     assert json.loads(out) == {"echoed": True}
+
+
+def test_validate_directory_is_reported_and_remaining_files_still_checked(monkeypatch, capsys, tmp_path, template_file):
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["validate", str(subdir), str(template_file)])
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert f"INVALID: {subdir}" in captured.err
+    assert "OK: greet v1" in captured.out
+    assert "1 valid, 1 invalid" in captured.out
+
+
+def test_render_directory_exits_cleanly(monkeypatch, capsys, tmp_path):
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["render", str(tmp_path)])
+    assert exc_info.value.code == 1
+    assert "error: cannot read" in capsys.readouterr().err
+
+
+def test_info_directory_exits_cleanly(monkeypatch, capsys, tmp_path):
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["info", str(tmp_path)])
+    assert exc_info.value.code == 1
+    assert "error: cannot read" in capsys.readouterr().err
+
+
+def test_submit_unreachable_gateway_exits_cleanly(monkeypatch, capsys, template_file):
+    import prompt_template_manager.gateway_client as gateway_module
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    real_client = httpx.Client
+    monkeypatch.setattr(gateway_module.httpx, "Client", lambda: real_client(transport=httpx.MockTransport(refuse)))
+
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["submit", str(template_file), "--gateway-url", "http://gateway.test"])
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "error: could not reach gateway at http://gateway.test" in err
+
+
+def test_version_flag(monkeypatch, capsys):
+    from prompt_template_manager import __version__
+
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["--version"])
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.strip() == f"ptm {__version__}"

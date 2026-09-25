@@ -28,6 +28,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from .models import Template, TemplateError
 
 _DIRECT_SIGIL_RE = re.compile(r"^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$")
+_EMBEDDED_SIGIL_RE = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 # Templates are loaded from files, and a template file can come from a
 # third party (shared, downloaded, pulled from a registry) just as easily
@@ -197,14 +198,42 @@ def find_referenced_variables(value: Any, found: set[str] | None = None) -> set[
     return found
 
 
+def _find_embedded_sigils(value: Any, path: str = "") -> list[tuple[str, str]]:
+    """(param path, variable name) for every ``${var}`` that is only *part*
+    of a string. Such a sigil is not substituted - it reaches the model
+    literally, which is exactly the silent failure this tool exists to stop."""
+    found: list[tuple[str, str]] = []
+    if isinstance(value, dict):
+        for key, v in value.items():
+            found += _find_embedded_sigils(v, f"{path}.{key}" if path else str(key))
+    elif isinstance(value, list):
+        for index, v in enumerate(value):
+            found += _find_embedded_sigils(v, f"{path}[{index}]")
+    elif isinstance(value, str) and not _DIRECT_SIGIL_RE.match(value):
+        found += [(path, m.group(1)) for m in _EMBEDDED_SIGIL_RE.finditer(value)]
+    return found
+
+
 def validate_template(template: Template) -> list[str]:
     """Static validation independent of any specific render call.
 
     Raises ``TemplateError`` for a hard problem: params reference a
     variable the template never declared. Returns a list of non-fatal
     warning strings for variables that are declared but never referenced
-    anywhere in params (almost certainly dead, but not actually broken).
+    anywhere in params (almost certainly dead, but not actually broken),
+    and for a ``${var}`` embedded in a longer string (sent literally).
+
+    Also raises if a declared ``default`` cannot be coerced to the
+    variable's declared type - that template could never render with its
+    defaults, so it should not pass validation.
     """
+    for var_name, spec in template.variables.items():
+        if spec.default is not None:
+            try:
+                _coerce(spec.default, spec.type, var_name)
+            except TemplateError as exc:
+                raise TemplateError(f"invalid default: {exc}") from exc
+
     referenced = find_referenced_variables(template.params)
     declared = set(template.variables)
 
@@ -215,4 +244,10 @@ def validate_template(template: Template) -> list[str]:
         )
 
     unused = declared - referenced
-    return [f"variable {name!r} is declared but never referenced in params" for name in sorted(unused)]
+    warnings = [f"variable {name!r} is declared but never referenced in params" for name in sorted(unused)]
+    for param_path, var_name in _find_embedded_sigils(template.params):
+        warnings.append(
+            f"param {param_path!r}: '${{{var_name}}}' is only part of the string, so it is sent literally "
+            f"(use '{{{{ {var_name} }}}}' inside a string, or make '${{{var_name}}}' the whole value)"
+        )
+    return warnings

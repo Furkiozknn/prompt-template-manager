@@ -7,7 +7,8 @@ import json
 import sys
 from typing import Any
 
-from .gateway_client import GatewayJobFailedError, GatewayJobTimeoutError, GatewaySubmissionError, submit_and_wait
+from . import __version__
+from .gateway_client import GatewayError, submit_and_wait
 from .loader import load_template_file, load_vars_file
 from .models import TemplateError
 from .renderer import render_template, validate_template
@@ -112,7 +113,7 @@ def _cmd_submit(args: argparse.Namespace) -> None:
         result: dict[str, Any] = submit_and_wait(
             args.gateway_url, template.capability, rendered, timeout=args.timeout
         )
-    except (GatewaySubmissionError, GatewayJobFailedError, GatewayJobTimeoutError) as exc:
+    except GatewayError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(1)
 
@@ -121,6 +122,7 @@ def _cmd_submit(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="ptm", description="prompt-template-manager")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     validate_parser = subparsers.add_parser(

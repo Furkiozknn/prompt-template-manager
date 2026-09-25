@@ -10,10 +10,19 @@ schema," not a heavyweight object model.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 ALLOWED_VARIABLE_TYPES = ("string", "integer", "float", "boolean")
+
+# `capability` becomes a URL path segment: `ptm submit` POSTs to
+# {gateway-url}/v1/{capability}. A template can come from a third party, so
+# it must not be able to smuggle in "/", "..", "?" or "#" and point the
+# request at a different endpoint of the gateway. ai-job-gateway itself
+# accepts [A-Za-z0-9_-]; "." is allowed here (not as the first character)
+# for other servers implementing the same contract.
+_CAPABILITY_RE = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$")
 
 
 class TemplateError(Exception):
@@ -58,6 +67,12 @@ class Template:
         missing = [k for k in ("name", "version", "capability", "params") if k not in data]
         if missing:
             raise TemplateError(f"template missing required field(s): {', '.join(missing)}")
+        capability = data["capability"]
+        if not isinstance(capability, str) or not _CAPABILITY_RE.match(capability):
+            raise TemplateError(
+                f"'capability' must be a single URL path segment "
+                f"(letters, digits, '_', '-', '.'; not starting with '.'), got {capability!r}"
+            )
         if not isinstance(data["params"], dict):
             raise TemplateError("'params' must be a mapping (object), not a list or scalar")
 
@@ -70,10 +85,17 @@ class Template:
             spec = spec or {}
             if not isinstance(spec, dict):
                 raise TemplateError(f"variable {var_name!r}: spec must be a mapping, got {type(spec).__name__}")
+            required = spec.get("required", False)
+            if not isinstance(required, bool):
+                # bool("false") is True - a quoted `required: "false"` would
+                # otherwise silently make the variable required.
+                raise TemplateError(
+                    f"variable {var_name!r}: 'required' must be true or false (unquoted), got {required!r}"
+                )
             variables[var_name] = VariableSpec(
                 name=var_name,
                 type=spec.get("type", "string"),
-                required=bool(spec.get("required", False)),
+                required=required,
                 default=spec.get("default"),
                 description=spec.get("description", ""),
             )
@@ -81,7 +103,7 @@ class Template:
         return cls(
             name=data["name"],
             version=str(data["version"]),
-            capability=data["capability"],
+            capability=capability,
             params=data["params"],
             description=data.get("description", ""),
             variables=variables,

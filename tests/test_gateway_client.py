@@ -6,8 +6,11 @@ import httpx
 import pytest
 
 from prompt_template_manager.gateway_client import (
+    GatewayConnectionError,
+    GatewayError,
     GatewayJobFailedError,
     GatewayJobTimeoutError,
+    GatewayResponseError,
     GatewaySubmissionError,
     submit_and_wait,
 )
@@ -102,3 +105,56 @@ def test_base_url_trailing_slash_does_not_produce_a_double_slash():
     )
     assert seen_paths == ["/v1/echo", "/v1/jobs/job-1"]
     assert not any("//" in p for p in seen_paths)
+
+
+def _accepting(poll_response):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(202, json={"id": "job-1", "polling_url": "/v1/jobs/job-1"})
+        return poll_response
+    return handler
+
+
+def test_unreachable_gateway_raises_gateway_connection_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with pytest.raises(GatewayConnectionError, match="could not reach gateway"):
+        submit_and_wait("http://gateway.test", "echo", {}, http_client=_client_for(handler))
+
+
+def test_poll_http_error_raises_gateway_response_error_not_httpx_error():
+    handler = _accepting(httpx.Response(500, text="boom"))
+    with pytest.raises(GatewayResponseError, match="500"):
+        submit_and_wait("http://gateway.test", "echo", {}, poll_interval=0, http_client=_client_for(handler))
+
+
+@pytest.mark.parametrize(
+    "submit_response",
+    [
+        httpx.Response(200, text="<html>not json</html>"),
+        httpx.Response(202, json={"unexpected": True}),
+        httpx.Response(202, json=["a", "list"]),
+    ],
+)
+def test_malformed_submission_response_raises_gateway_response_error(submit_response):
+    with pytest.raises(GatewayResponseError, match="submission"):
+        submit_and_wait("http://gateway.test", "echo", {}, http_client=_client_for(lambda r: submit_response))
+
+
+def test_non_json_poll_body_raises_gateway_response_error():
+    handler = _accepting(httpx.Response(200, text="nope"))
+    with pytest.raises(GatewayResponseError, match="poll"):
+        submit_and_wait("http://gateway.test", "echo", {}, poll_interval=0, http_client=_client_for(handler))
+
+
+def test_expired_with_non_json_body_still_reports_expiry():
+    handler = _accepting(httpx.Response(410, text="gone"))
+    with pytest.raises(GatewayJobFailedError, match="expired"):
+        submit_and_wait("http://gateway.test", "echo", {}, poll_interval=0, http_client=_client_for(handler))
+
+
+def test_all_gateway_errors_share_a_base_class():
+    for cls in (GatewaySubmissionError, GatewayJobFailedError, GatewayJobTimeoutError,
+                GatewayConnectionError, GatewayResponseError):
+        assert issubclass(cls, GatewayError)
