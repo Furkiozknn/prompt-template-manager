@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0.0",
+  "id": "prompt-template-manager",
+  "owner": "Furkiozknn",
+  "repository": "https://github.com/Furkiozknn/prompt-template-manager",
+  "homepage": "https://furkiozknn.github.io/#prompt-template-manager",
+  "releases": "https://github.com/Furkiozknn/prompt-template-manager/releases",
+  "status": "active",
+  "category": "developer-tool",
+  "platform": [
+    "cli",
+    "library"
+  ],
+  "primary_language": "Python",
+  "technologies": [
+    "Python 3.11+",
+    "Jinja2 SandboxedEnvironment",
+    "CLI: ptm"
+  ],
+  "version": "0.1.0",
+  "license": "MIT",
+  "topics": [
+    "cli",
+    "developer-tools",
+    "gitops",
+    "jinja2",
+    "llm",
+    "llmops",
+    "prompt-engineering",
+    "prompt-templates",
+    "python",
+    "sandbox",
+    "version-control"
+  ],
+  "summary": "Your prompts deserve git diff, not a database row. Templates as plain YAML, rendered through Jinja's SandboxedEnvironment with StrictUndefined so a typo'd variable fails loudly instead of rendering blank - plus a ${var} form that keeps an integer an integer instead of stringifying it. CLI: ptm. 61 tests.",
+  "key_features": [
+    "Templates as plain YAML, so a prompt change is a diff in a pull request rather than a database row",
+    "Rendered through Jinja's SandboxedEnvironment with StrictUndefined: a typo'd variable fails loudly instead of rendering blank",
+    "A ${var} form that keeps an integer an integer instead of stringifying it",
+    "Works as a CLI and as a library, with the security model documented"
+  ],
+  "media": {
+    "hero": "assets/banner.svg",
+    "screenshots": [],
+    "gifs": [
+      "assets/demo.gif"
+    ],
+    "videos": []
+  },
+  "tests": {
+    "count": 61,
+    "source": "`61 passed`",
+    "measured": "2026-09-15"
+  },
+  "ci": {
+    "workflows": [
+      "ci.yml",
+      "yayinla.yml"
+    ],
+    "badge": "https://github.com/Furkiozknn/prompt-template-manager/actions/workflows/ci.yml/badge.svg"
+  },
+  "docs": {
+    "readme": "README.md",
+    "changelog": null,
+    "version_history": null,
+    "roadmap": null,
+    "security": "SECURITY.md",
+    "contributing": "CONTRIBUTING.md",
+    "license_file": "LICENSE"
+  },
+  "social": {
+    "headline": "Your prompts deserve git diff, not a database row.",
+    "hashtags": [
+      "llmops",
+      "promptengineering",
+      "python",
+      "gitops"
+    ],
+    "primary_link": "https://github.com/Furkiozknn/prompt-template-manager"
+  },
+  "provenance": {
+    "generated_at": "2026-09-22",
+    "generator": "schema/uret.py",
+    "rule": "mechanical fields read from the repository and the GitHub API; editorial fields hand-written and reviewed; no field is generated from a guess"
+  }
+}
