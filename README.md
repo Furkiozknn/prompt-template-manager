@@ -2,6 +2,9 @@
 
 # prompt-template-manager
 
+<p align="center"><img src="docs/reel/reel.gif" alt="prompt-template-manager - 15-second motion reel" width="720"></p>
+<p align="center"><sub><a href="docs/reel/reel.mp4">MP4 version with sound</a></sub></p>
+
 **Your prompts deserve `git diff`, not a database row.**
 
 Versioned, git-diffable prompt/pipeline templates for generative-AI requests, rendered by a strict, sandboxed engine and driven by a small CLI (`ptm`).
