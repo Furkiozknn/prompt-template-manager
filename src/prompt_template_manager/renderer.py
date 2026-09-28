@@ -18,6 +18,8 @@ at all) passes through unchanged as a literal.
 from __future__ import annotations
 
 import difflib
+import math
+import operator
 import re
 from typing import Any
 
@@ -25,9 +27,10 @@ from jinja2 import StrictUndefined, UndefinedError, meta
 from jinja2.exceptions import SecurityError, TemplateSyntaxError
 from jinja2.sandbox import SandboxedEnvironment
 
-from .models import Template, TemplateError
+from .models import Template, TemplateError, check_json_tree
 
 _DIRECT_SIGIL_RE = re.compile(r"^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$")
+_EMBEDDED_SIGIL_RE = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 # Templates are loaded from files, and a template file can come from a
 # third party (shared, downloaded, pulled from a registry) just as easily
@@ -38,10 +41,52 @@ _DIRECT_SIGIL_RE = re.compile(r"^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$")
 # attribute/method access outside an allow-list while leaving ordinary
 # variable interpolation (the only thing legitimate templates here do)
 # completely unaffected.
-_jinja_env = SandboxedEnvironment(undefined=StrictUndefined)
+#
+# The sandbox guards object access, not resource use: ``{{ 10 ** (10 ** 9) }}``
+# hung the process and ``{{ 'a' * 3000000000 }}`` exhausted memory. Those two
+# operators are the one-token ways to do it, so they are bounded here. This
+# is not a CPU/memory limit for Jinja as a whole (nested loops can still spin)
+# - the README says so and suggests `timeout` for untrusted files.
+_MAX_POWER_BITS = 4096
+_MAX_REPEAT_LEN = 100_000
+
+
+class _BoundedSandbox(SandboxedEnvironment):
+    intercepted_binops = frozenset(["*", "**"])
+
+    def call_binop(self, context: Any, operator_name: str, left: Any, right: Any) -> Any:
+        if operator_name == "**":
+            if isinstance(left, int) and isinstance(right, int) and right > 0:
+                if abs(left) > 1 and abs(left).bit_length() * right > _MAX_POWER_BITS:
+                    raise SecurityError(f"{left!r} ** {right!r} is too large to compute")
+            elif isinstance(right, (int, float)) and abs(right) > _MAX_POWER_BITS:
+                raise SecurityError(f"exponent {right!r} is too large")
+            return operator.pow(left, right)
+        if operator_name == "*":
+            for seq, count in ((left, right), (right, left)):
+                if isinstance(seq, (str, list, tuple)) and isinstance(count, int) and not isinstance(count, bool):
+                    if len(seq) * count > _MAX_REPEAT_LEN:
+                        raise SecurityError(
+                            f"repeating a {type(seq).__name__} {count} times exceeds {_MAX_REPEAT_LEN} items"
+                        )
+            return operator.mul(left, right)
+        return super().call_binop(context, operator_name, left, right)  # pragma: no cover
+
+
+_jinja_env = _BoundedSandbox(undefined=StrictUndefined)
 
 
 def _coerce(value: Any, var_type: str, var_name: str) -> Any:
+    if value is None:
+        raise TemplateError(
+            f"variable {var_name!r}: no value given (an empty entry in a vars file?); "
+            "leave it out to use the default"
+        )
+    if isinstance(value, (dict, list, tuple, set)):
+        raise TemplateError(
+            f"variable {var_name!r}: expected a single value, got a {type(value).__name__} "
+            "(a --vars-file entry must be a string, number or boolean)"
+        )
     if var_type == "string":
         return str(value)
     if var_type == "integer":
@@ -56,12 +101,15 @@ def _coerce(value: Any, var_type: str, var_name: str) -> Any:
     if var_type == "float":
         if isinstance(value, bool):
             raise TemplateError(f"variable {var_name!r}: expected float, got boolean")
-        if isinstance(value, (int, float)):
-            return float(value)
         try:
-            return float(str(value))
-        except ValueError:
+            result = float(value) if isinstance(value, (int, float)) else float(str(value))
+        except (ValueError, OverflowError):
             raise TemplateError(f"variable {var_name!r}: cannot convert {value!r} to float")
+        if not math.isfinite(result):
+            # json.dumps would write NaN / Infinity - not JSON, so not a
+            # request body any gateway is obliged to parse.
+            raise TemplateError(f"variable {var_name!r}: {value!r} is not a finite number")
+        return result
     if var_type == "boolean":
         if isinstance(value, bool):
             return value
@@ -162,11 +210,20 @@ def render_value(value: Any, resolved_vars: dict[str, Any]) -> Any:
                 "(templates render in a sandboxed Jinja2 environment; only variable "
                 "interpolation and safe filters are permitted, see README Security section)"
             ) from exc
+        except (ArithmeticError, TypeError, ValueError, LookupError, AttributeError, RuntimeError) as exc:
+            # {{ 1/0 }}, {{ 'a' + 1 }}, range() over the sandbox limit, ...:
+            # a bug in the template, reported as one rather than a traceback.
+            raise TemplateError(
+                f"error while rendering {value!r}: {type(exc).__name__}: {exc}"
+            ) from exc
     return value
 
 
 def render_template(template: Template, overrides: dict[str, Any]) -> dict[str, Any]:
     """The main entry point: resolve variables, then render params."""
+    # from_dict already checked this; a Template built by hand in library
+    # code has not been, and the walk below must not meet an alias bomb.
+    check_json_tree(template.params)
     resolved = resolve_variables(template, overrides)
     return render_value(template.params, resolved)
 
@@ -197,14 +254,43 @@ def find_referenced_variables(value: Any, found: set[str] | None = None) -> set[
     return found
 
 
+def _find_embedded_sigils(value: Any, path: str = "") -> list[tuple[str, str]]:
+    """(param path, variable name) for every ``${var}`` that is only *part*
+    of a string. Such a sigil is not substituted - it reaches the model
+    literally, which is exactly the silent failure this tool exists to stop."""
+    found: list[tuple[str, str]] = []
+    if isinstance(value, dict):
+        for key, v in value.items():
+            found += _find_embedded_sigils(v, f"{path}.{key}" if path else str(key))
+    elif isinstance(value, list):
+        for index, v in enumerate(value):
+            found += _find_embedded_sigils(v, f"{path}[{index}]")
+    elif isinstance(value, str) and not _DIRECT_SIGIL_RE.match(value):
+        found += [(path, m.group(1)) for m in _EMBEDDED_SIGIL_RE.finditer(value)]
+    return found
+
+
 def validate_template(template: Template) -> list[str]:
     """Static validation independent of any specific render call.
 
     Raises ``TemplateError`` for a hard problem: params reference a
     variable the template never declared. Returns a list of non-fatal
     warning strings for variables that are declared but never referenced
-    anywhere in params (almost certainly dead, but not actually broken).
+    anywhere in params (almost certainly dead, but not actually broken),
+    and for a ``${var}`` embedded in a longer string (sent literally).
+
+    Also raises if a declared ``default`` cannot be coerced to the
+    variable's declared type - that template could never render with its
+    defaults, so it should not pass validation.
     """
+    check_json_tree(template.params)
+    for var_name, spec in template.variables.items():
+        if spec.default is not None:
+            try:
+                _coerce(spec.default, spec.type, var_name)
+            except TemplateError as exc:
+                raise TemplateError(f"invalid default: {exc}") from exc
+
     referenced = find_referenced_variables(template.params)
     declared = set(template.variables)
 
@@ -215,4 +301,10 @@ def validate_template(template: Template) -> list[str]:
         )
 
     unused = declared - referenced
-    return [f"variable {name!r} is declared but never referenced in params" for name in sorted(unused)]
+    warnings = [f"variable {name!r} is declared but never referenced in params" for name in sorted(unused)]
+    for param_path, var_name in _find_embedded_sigils(template.params):
+        warnings.append(
+            f"param {param_path!r}: '${{{var_name}}}' is only part of the string, so it is sent literally "
+            f"(use '{{{{ {var_name} }}}}' inside a string, or make '${{{var_name}}}' the whole value)"
+        )
+    return warnings

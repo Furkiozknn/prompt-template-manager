@@ -87,3 +87,21 @@ def test_load_vars_file_rejects_non_mapping(tmp_path: Path):
 def test_load_vars_file_missing_file_raises(tmp_path: Path):
     with pytest.raises(TemplateError, match="no such vars file"):
         load_vars_file(tmp_path / "does-not-exist.yaml")
+
+
+def test_load_template_file_on_a_directory_raises_template_error(tmp_path: Path):
+    # Used to escape as a raw IsADirectoryError traceback (e.g. `ptm validate templates/`).
+    with pytest.raises(TemplateError, match="cannot read"):
+        load_template_file(tmp_path)
+
+
+def test_load_template_file_non_utf8_raises_template_error(tmp_path: Path):
+    path = tmp_path / "binary.yaml"
+    path.write_bytes(b"\x93\xff\x00 not text")
+    with pytest.raises(TemplateError, match="not valid UTF-8"):
+        load_template_file(path)
+
+
+def test_load_vars_file_on_a_directory_raises_template_error(tmp_path: Path):
+    with pytest.raises(TemplateError, match="cannot read"):
+        load_vars_file(tmp_path)

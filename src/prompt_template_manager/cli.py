@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from typing import Any
 
-from .gateway_client import GatewayJobFailedError, GatewayJobTimeoutError, GatewaySubmissionError, submit_and_wait
+from . import __version__
+from .gateway_client import GatewayError, submit_and_wait
 from .loader import load_template_file, load_vars_file
 from .models import TemplateError
 from .renderer import render_template, validate_template
@@ -17,10 +19,22 @@ def _parse_var_args(pairs: list[str]) -> dict[str, str]:
     result: dict[str, str] = {}
     for pair in pairs:
         if "=" not in pair:
-            raise SystemExit(f"--var must be KEY=VALUE, got {pair!r}")
+            print(f"error: --var must be KEY=VALUE, got {pair!r}", file=sys.stderr)
+            raise SystemExit(1)
         key, _, value = pair.partition("=")
         result[key] = value
     return result
+
+
+def _positive_seconds(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {text!r}")
+    # nan made the poll loop's deadline check always false: it never gave up.
+    if math.isnan(value) or value <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive number of seconds, got {text!r}")
+    return value
 
 
 def _cmd_validate(args: argparse.Namespace) -> None:
@@ -112,7 +126,7 @@ def _cmd_submit(args: argparse.Namespace) -> None:
         result: dict[str, Any] = submit_and_wait(
             args.gateway_url, template.capability, rendered, timeout=args.timeout
         )
-    except (GatewaySubmissionError, GatewayJobFailedError, GatewayJobTimeoutError) as exc:
+    except GatewayError as exc:
         print(f"error: {exc}", file=sys.stderr)
         raise SystemExit(1)
 
@@ -120,7 +134,16 @@ def _cmd_submit(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="ptm", description="prompt-template-manager")
+    parser = argparse.ArgumentParser(
+        prog="ptm",
+        description="Versioned, git-diffable prompt templates: validate, render and submit YAML templates.",
+        epilog=(
+            "example: ptm render prompt.yaml --var subject='a red sneaker' --pretty\n"
+            "exit codes: 0 ok, 1 template/gateway error, 2 bad command-line usage, 130 interrupted"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     validate_parser = subparsers.add_parser(
@@ -148,16 +171,24 @@ def main() -> None:
         "submit", help="render a template and submit it to an ai-job-gateway-compatible server"
     )
     submit_parser.add_argument("template")
-    submit_parser.add_argument("--gateway-url", required=True)
+    submit_parser.add_argument(
+        "--gateway-url", required=True, help="base URL of the gateway, e.g. http://127.0.0.1:8000"
+    )
     submit_parser.add_argument("--var", action="append", default=[], help="KEY=VALUE, repeatable")
     submit_parser.add_argument(
         "--vars-file", help="JSON or YAML file of variable name -> value; --var overrides take precedence"
     )
-    submit_parser.add_argument("--timeout", type=float, default=60.0)
+    submit_parser.add_argument(
+        "--timeout", type=_positive_seconds, default=60.0, help="seconds to wait for the job (default: 60)"
+    )
     submit_parser.set_defaults(func=_cmd_submit)
 
     args = parser.parse_args()
-    args.func(args)
+    try:
+        args.func(args)
+    except KeyboardInterrupt:
+        print("interrupted", file=sys.stderr)
+        raise SystemExit(130)
 
 
 if __name__ == "__main__":

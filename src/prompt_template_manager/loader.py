@@ -22,11 +22,26 @@ def load_template_str(text: str, *, source_path: str | None = None) -> Template:
     return Template.from_dict(data, source_path=source_path)
 
 
+def _read_text(path: Path, what: str) -> str:
+    """Read a UTF-8 text file, turning every I/O failure into a TemplateError.
+
+    A directory, an unreadable file or a binary file used to escape as a raw
+    OSError / UnicodeDecodeError traceback - and in `ptm validate a b c` it
+    aborted the whole run instead of marking one file INVALID.
+    """
+    if not path.exists():
+        raise TemplateError(f"no such {what}: {path}")
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise TemplateError(f"{what} {path} is not valid UTF-8 text: {exc.reason} at byte {exc.start}") from exc
+    except OSError as exc:
+        raise TemplateError(f"cannot read {what} {path}: {exc.strerror or exc}") from exc
+
+
 def load_template_file(path: str | Path) -> Template:
     path = Path(path)
-    if not path.exists():
-        raise TemplateError(f"no such file: {path}")
-    return load_template_str(path.read_text(encoding="utf-8"), source_path=str(path))
+    return load_template_str(_read_text(path, "file"), source_path=str(path))
 
 
 def load_vars_file(path: str | Path) -> dict[str, Any]:
@@ -37,10 +52,9 @@ def load_vars_file(path: str | Path) -> dict[str, Any]:
     for templates with more variables than are comfortable to type as
     repeated `--var KEY=VALUE` flags."""
     path = Path(path)
-    if not path.exists():
-        raise TemplateError(f"no such vars file: {path}")
+    text = _read_text(path, "vars file")
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise TemplateError(f"invalid YAML/JSON in vars file {path}: {exc}") from exc
     if data is None:

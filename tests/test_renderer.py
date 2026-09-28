@@ -314,3 +314,55 @@ def test_malformed_template_in_variable_scan_is_also_a_template_error():
     with pytest.raises(TemplateError) as excinfo:
         find_referenced_variables({"prompt": "{% if %}"})
     assert "syntax error" in str(excinfo.value)
+
+
+def test_validate_rejects_default_that_does_not_match_declared_type():
+    # Used to pass `ptm validate` and only fail at render time.
+    template = load_template_str(
+        """
+name: t
+version: "1"
+capability: echo
+variables:
+  width: {type: integer, default: big}
+params:
+  width: "${width}"
+"""
+    )
+    with pytest.raises(TemplateError, match="width.*cannot convert 'big' to integer"):
+        validate_template(template)
+
+
+def test_validate_warns_about_sigil_embedded_in_a_larger_string():
+    # "${var}" only substitutes when it is the whole value; embedded in a
+    # longer string it is sent to the model literally.
+    template = load_template_str(
+        """
+name: t
+version: "1"
+capability: echo
+variables:
+  width: {type: integer, default: 512}
+params:
+  size: "${width}px"
+  width: "${width}"
+"""
+    )
+    warnings = validate_template(template)
+    assert any("'size'" in w and "${width}" in w and "literally" in w for w in warnings)
+    assert render_template(template, {})["size"] == "${width}px"
+
+
+def test_validate_does_not_warn_for_whole_value_sigil():
+    template = load_template_str(
+        """
+name: t
+version: "1"
+capability: echo
+variables:
+  width: {type: integer, default: 512}
+params:
+  width: "${width}"
+"""
+    )
+    assert validate_template(template) == []
