@@ -18,6 +18,7 @@ at all) passes through unchanged as a literal.
 from __future__ import annotations
 
 import difflib
+import math
 import re
 from typing import Any
 
@@ -57,11 +58,21 @@ def _coerce(value: Any, var_type: str, var_name: str) -> Any:
         if isinstance(value, bool):
             raise TemplateError(f"variable {var_name!r}: expected float, got boolean")
         if isinstance(value, (int, float)):
-            return float(value)
-        try:
-            return float(str(value))
-        except ValueError:
-            raise TemplateError(f"variable {var_name!r}: cannot convert {value!r} to float")
+            result = float(value)
+        else:
+            try:
+                result = float(str(value))
+            except ValueError:
+                raise TemplateError(f"variable {var_name!r}: cannot convert {value!r} to float")
+        # float() accepts "nan"/"inf", but JSON has no such values: the
+        # rendered params came out as `NaN`/`Infinity`, which is not the JSON
+        # body `render` promises and made `submit` crash inside the HTTP client.
+        if not math.isfinite(result):
+            raise TemplateError(
+                f"variable {var_name!r}: cannot convert {value!r} to float "
+                "(NaN and infinity are not valid JSON numbers)"
+            )
+        return result
     if var_type == "boolean":
         if isinstance(value, bool):
             return value

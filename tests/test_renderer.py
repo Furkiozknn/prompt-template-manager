@@ -147,6 +147,30 @@ def test_integer_coercion_rejects_non_numeric_string():
         resolve_variables(load_template_str(BASIC), {"times": "not-a-number"})
 
 
+FLOAT = """
+name: strength
+version: "1"
+capability: image
+params:
+  strength: "${strength}"
+variables:
+  strength:
+    type: float
+    default: 0.5
+"""
+
+
+@pytest.mark.parametrize("raw", ["nan", "NaN", "inf", "-inf", "Infinity", float("nan"), float("inf")])
+def test_float_coercion_rejects_nan_and_infinity(raw):
+    """Python's float() happily parses "nan" and "inf", but JSON has no such
+    values: `ptm render` printed `{"strength": NaN}` with exit code 0 - not
+    JSON, so the body it promises to be is one no gateway can parse - and
+    `ptm submit` died with a raw ValueError traceback from the HTTP client.
+    A non-finite value is an uncoercible value, reported like any other."""
+    with pytest.raises(TemplateError, match="strength"):
+        resolve_variables(load_template_str(FLOAT), {"strength": raw})
+
+
 def test_boolean_coercion_accepts_common_string_forms():
     for truthy in ("true", "True", "1", "yes"):
         resolved = resolve_variables(load_template_str(BASIC), {"shout": truthy})
