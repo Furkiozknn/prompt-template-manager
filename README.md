@@ -2,16 +2,25 @@
 
 # prompt-template-manager
 
-<p align="center"><img src="docs/reel/reel.gif" alt="prompt-template-manager - 15-second motion reel" width="720"></p>
-<p align="center"><sub><a href="docs/reel/reel.mp4">MP4 version with sound</a></sub></p>
-
 **Your prompts deserve `git diff`, not a database row.**
 
-Versioned, git-diffable prompt/pipeline templates for generative-AI requests, rendered by a strict, sandboxed engine and driven by a small CLI (`ptm`).
+`ptm` keeps a generation prompt as a plain YAML template in your repository, renders it to the exact JSON a generation API takes, and fails loudly (typo'd variable, wrong type, sandbox escape) instead of sending a blank prompt.
 
-![ptm validating and describing examples/product-photo.yaml: the template checks out, and its capability, variables, types and defaults are printed from the file itself](assets/demo.gif)
+```bash
+uvx --from git+https://github.com/Furkiozknn/prompt-template-manager ptm --help
+```
 
-<sub>Real output from <code>examples/product-photo.yaml</code>, a template in this repository.</sub>
+<p align="center"><img src="docs/demo/demo.gif" alt="A terminal: ptm validate accepts examples/product-photo.yaml, ptm render prints the params JSON with width and height as integers, a mistyped --var name is refused with a did-you-mean suggestion, and git diff shows a one-word prompt change as a one-line diff" width="760"></p>
+<p align="center"><sub>21 seconds, 5 commands, nothing typed by hand: <a href="docs/demo/komutlar.txt">the exact commands, output and exit codes</a>, replayed. <a href="docs/demo/demo.mp4">MP4</a></sub></p>
+
+Not on PyPI yet, so `uvx` builds it from GitHub: 11.4 s from an empty uv cache, 3.1 s warm, then `ptm validate` and `ptm render` in under a second each. Measured on 30 September 2026, Windows 11, Python 3.12 ([`docs/demo/kurulum.txt`](docs/demo/kurulum.txt), [`docs/DENETIM.md`](docs/DENETIM.md)).
+
+| Use it when | Do not use it when |
+|---|---|
+| prompts live in your repo and a change should be reviewed as a diff, in a pull request | you want a prompt registry, a web UI, A/B tests or an eval harness: there is none |
+| you feed a gateway or a model API a params object and want type errors caught before the request, not in the response | your prompts are built from runtime data structures: variables are strings, numbers and booleans only |
+| CI should reject a broken template: `ptm validate templates/*.yaml` exits `1` if any file is invalid | you render templates you have not read and need a hard security boundary: the sandbox is defense in depth, see [Security](#security) |
+| you want one self-contained file per prompt | you want template inheritance or includes: there are none, on purpose |
 
 ## The problem this solves
 
@@ -289,9 +298,11 @@ uv sync --group dev
 uv run pytest
 ```
 
-The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 150 tests (`uv run pytest --collect-only -q` prints the current count). `tests/test_untrusted_input.py` holds the hostile-template cases: dates, NaN, alias bombs, self-referencing aliases, oversized `**`/`*`.
+The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 156 tests (`uv run pytest --collect-only -q` prints the current count). `tests/test_untrusted_input.py` holds the hostile-template cases: dates, NaN, alias bombs, self-referencing aliases, oversized `**`/`*`.
 
-`assets/fails-loudly.svg` is regenerated from real runs with `uv run python arac/terminal-svg.py`.
+`assets/fails-loudly.svg` is regenerated from real runs with `uv run python arac/terminal-svg.py`. The demo above is regenerated with `pip install . && python arac/demo-uret.py` (`docs/demo/komutlar.txt` is the record; the recording needs node, playwright and ffmpeg).
+
+The demo font is JetBrains Mono, SIL Open Font License 1.1 (`assets/yazi/OFL-jetbrains-mono.txt`).
 
 ## Limitations
 

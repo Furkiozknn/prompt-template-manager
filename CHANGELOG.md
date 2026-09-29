@@ -6,6 +6,23 @@ surumler [Semantic Versioning](https://semver.org/) kuralini izler.
 buradaki en ust surumle ayni olmalidir; `yayinla.yml` etiketle
 `pyproject.toml` uyusmazsa yayini durdurur.
 
+## [Unreleased]
+
+### Degisti
+- `ptm --help` ve her alt komutun `--help` ciktisi bir ornek komut gosteriyor;
+  `--var` ve `--vars-file` degerleri anlasilir (`KEY=VALUE`, `FILE`).
+- Kullanim hatalari (cikis kodu 2) `run 'ptm <komut> --help' for examples` diye yonlendiriyor.
+- Bir klasor sablon diye verilince Windows'ta "Permission denied" yerine "it is a directory" deniyor.
+- Bozuk YAML tek satirlik `line N, column M: ...` hatasi veriyor (PyYAML'in cok satirli dokumu yerine);
+  bos dosya "is empty" diyor.
+
+### Duzeltildi
+- cp1254 (Turkce Windows) konsolunda sablon adi/aciklamasinda `→` gibi bir karakter `ptm info` ve
+  `ptm validate`'i UnicodeEncodeError ile dusuruyordu; cikti artik `?` ile yaziliyor.
+
+### Eklendi
+- README demosu: `arac/demo-uret.py` gercek komutlari kosar, `docs/demo/` kaydi ve oynatmasini yazar.
+
 ## [0.1.0] - Yayimlanmadi
 
 Ilk yayin. PyPI paket adi `ptm-cli`, komut `ptm`.

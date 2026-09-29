@@ -14,12 +14,24 @@ def load_template_str(text: str, *, source_path: str | None = None) -> Template:
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
-        raise TemplateError(f"invalid YAML{f' in {source_path}' if source_path else ''}: {exc}") from exc
+        raise TemplateError(f"invalid YAML{f' in {source_path}' if source_path else ''}: {_yaml_problem(exc)}") from exc
+    if data is None:
+        raise TemplateError(f"template{f' ({source_path})' if source_path else ''} is empty")
     if not isinstance(data, dict):
         raise TemplateError(
             f"template{f' ({source_path})' if source_path else ''} must be a YAML mapping at the top level"
         )
     return Template.from_dict(data, source_path=source_path)
+
+
+def _yaml_problem(exc: yaml.YAMLError) -> str:
+    """One line - `line N, column M: what was expected` - instead of PyYAML's
+    multi-line dump, which quotes the source as `<unicode string>`."""
+    problem = getattr(exc, "problem", None)
+    mark = getattr(exc, "problem_mark", None)
+    if not problem or mark is None:
+        return " ".join(str(exc).split())
+    return f"line {mark.line + 1}, column {mark.column + 1}: {problem}"
 
 
 def _read_text(path: Path, what: str) -> str:
@@ -31,6 +43,9 @@ def _read_text(path: Path, what: str) -> str:
     """
     if not path.exists():
         raise TemplateError(f"no such {what}: {path}")
+    if path.is_dir():
+        # Windows reports open() on a directory as "Permission denied".
+        raise TemplateError(f"cannot read {what} {path}: it is a directory, not a {what}")
     try:
         return path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
@@ -56,7 +71,7 @@ def load_vars_file(path: str | Path) -> dict[str, Any]:
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as exc:
-        raise TemplateError(f"invalid YAML/JSON in vars file {path}: {exc}") from exc
+        raise TemplateError(f"invalid YAML/JSON in vars file {path}: {_yaml_problem(exc)}") from exc
     if data is None:
         return {}
     if not isinstance(data, dict):

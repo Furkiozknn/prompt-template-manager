@@ -268,3 +268,59 @@ def test_bad_var_flag_uses_the_error_prefix(monkeypatch, capsys, template_file):
         _run(monkeypatch, ["render", str(template_file), "--var", "no-equals-sign"])
     assert exc_info.value.code == 1
     assert capsys.readouterr().err.startswith("error: --var must be KEY=VALUE")
+
+
+def test_directory_is_called_a_directory_not_permission_denied(monkeypatch, capsys, tmp_path):
+    with pytest.raises(SystemExit):
+        _run(monkeypatch, ["render", str(tmp_path)])
+    err = capsys.readouterr().err
+    assert "it is a directory" in err
+    assert "Permission denied" not in err
+
+
+def test_broken_yaml_is_one_line_with_line_and_column(monkeypatch, capsys, tmp_path):
+    path = tmp_path / "bad.yaml"
+    path.write_text("name: [\n")
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["validate", str(path)])
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "line 2, column 1" in err
+    assert "<unicode string>" not in err
+    assert err.count("\n") == 1
+
+
+def test_empty_template_file_says_empty(monkeypatch, capsys, tmp_path):
+    path = tmp_path / "empty.yaml"
+    path.write_text("")
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["validate", str(path)])
+    assert exc_info.value.code == 1
+    assert "is empty" in capsys.readouterr().err
+
+
+def test_usage_error_points_to_help_and_keeps_exit_code_2(monkeypatch, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["render"])
+    assert exc_info.value.code == 2
+    assert "run 'ptm render --help' for examples" in capsys.readouterr().err
+
+
+def test_subcommand_help_has_an_example(monkeypatch, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        _run(monkeypatch, ["render", "--help"])
+    assert exc_info.value.code == 0
+    assert "ptm render prompt.yaml --var subject=" in capsys.readouterr().out
+
+
+def test_unencodable_description_does_not_crash_on_a_cp1254_console(monkeypatch, tmp_path):
+    import io
+
+    path = tmp_path / "t.yaml"
+    path.write_text('name: t\nversion: "1"\ncapability: c\ndescription: "a \u2192 b"\nparams: {p: x}\n', encoding="utf-8")
+    raw = io.BytesIO()
+    console = io.TextIOWrapper(raw, encoding="cp1254", errors="strict")
+    monkeypatch.setattr("sys.stdout", console)
+    _run(monkeypatch, ["info", str(path)])
+    console.flush()
+    assert b"a ? b" in raw.getvalue()

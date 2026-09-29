@@ -1,0 +1,35 @@
+# ptm terminal demo: real commands, real output
+# tarih: 2026-09-30T01:51:24+03:00
+# surum: 0.1.0 (pip install . ile kuruldu, PATH'teki ptm)
+# calisma klasoru: examples/product-photo.yaml kopyasi (bos klasorde)
+# her komut bash -c 'set -o pipefail; ...' ile bos bir klasorde kosuldu; hicbir satir elle yazilmadi
+
+$ ptm validate product-photo.yaml
+OK: product-photo-on-solid-background v1 (product-photo.yaml)
+[cikis kodu 0] (1.10 s)
+
+$ ptm render product-photo.yaml --var product_name='a red sneaker' --pretty
+{
+  "prompt": "professional studio product photo of a red sneaker, on a seamless white background, soft even lighting, high detail, centered composition",
+  "width": 1024,
+  "height": 1024,
+  "seed": 0
+}
+[cikis kodu 0] (1.06 s)
+
+$ ptm render product-photo.yaml --var product_nmae='a red sneaker'
+error: unknown variable(s) passed: 'product_nmae' (did you mean 'product_name'?) (not declared in product-photo.yaml)
+[cikis kodu 1] (0.87 s)
+
+$ sed 's/soft even lighting/hard rim lighting/' product-photo.yaml > v2.yaml
+[cikis kodu 0] (0.15 s)
+
+$ git diff --no-index --no-color -U0 product-photo.yaml v2.yaml
+diff --git a/product-photo.yaml b/v2.yaml
+index e55203d..9917dcd 100644
+--- a/product-photo.yaml
++++ b/v2.yaml
+@@ -34 +34 @@ params:
+-  prompt: "professional studio product photo of {{ product_name }}, on a seamless {{ background_color }} background, soft even lighting, high detail, centered composition"
++  prompt: "professional studio product photo of {{ product_name }}, on a seamless {{ background_color }} background, hard rim lighting, high detail, centered composition"
+[cikis kodu 1] (0.11 s)
