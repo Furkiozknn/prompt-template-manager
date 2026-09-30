@@ -6,7 +6,7 @@ import argparse
 import json
 import math
 import sys
-from typing import Any
+from typing import Any, NoReturn
 
 from . import __version__
 from .gateway_client import GatewayError, submit_and_wait
@@ -133,8 +133,33 @@ def _cmd_submit(args: argparse.Namespace) -> None:
     print(json.dumps(result, indent=2))
 
 
+class _Parser(argparse.ArgumentParser):
+    """Usage errors say where the examples are (still exit code 2)."""
+
+    def error(self, message: str) -> NoReturn:
+        self.print_usage(sys.stderr)
+        self.exit(2, f"{self.prog}: error: {message}\nrun '{self.prog} --help' for examples\n")
+
+
+_EPILOGS = {
+    "validate": "example: ptm validate templates/*.yaml   (exit 1 if any file is invalid)",
+    "render": (
+        "examples:\n"
+        "  ptm render prompt.yaml --var subject='a red sneaker' --pretty\n"
+        "  ptm render prompt.yaml --vars-file vars.yaml"
+    ),
+    "info": "example: ptm info prompt.yaml   (which --var flags does this template take?)",
+    "submit": "example: ptm submit prompt.yaml --gateway-url http://127.0.0.1:8000 --var subject=x",
+}
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
+    # A Turkish Windows console is cp1254: a template name or description with
+    # an arrow or emoji used to crash `info`/`validate` with UnicodeEncodeError.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+    parser = _Parser(
         prog="ptm",
         description="Versioned, git-diffable prompt templates: validate, render and submit YAML templates.",
         epilog=(
@@ -144,9 +169,15 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    validate_parser = subparsers.add_parser(
+    def add(name: str, **kwargs: Any) -> argparse.ArgumentParser:
+        return subparsers.add_parser(
+            name, epilog=_EPILOGS[name], formatter_class=argparse.RawDescriptionHelpFormatter, **kwargs
+        )
+
+
+    validate_parser = add(
         "validate", help="check one or more templates for structural problems"
     )
     validate_parser.add_argument(
@@ -154,29 +185,29 @@ def main() -> None:
     )
     validate_parser.set_defaults(func=_cmd_validate)
 
-    render_parser = subparsers.add_parser("render", help="render a template to a concrete params JSON object")
-    render_parser.add_argument("template")
-    render_parser.add_argument("--var", action="append", default=[], help="KEY=VALUE, repeatable")
+    render_parser = add("render", help="render a template to a concrete params JSON object")
+    render_parser.add_argument("template", help="template YAML file")
+    render_parser.add_argument("--var", action="append", default=[], metavar="KEY=VALUE", help="set a variable, e.g. --var subject='a red sneaker' (repeatable)")
     render_parser.add_argument(
-        "--vars-file", help="JSON or YAML file of variable name -> value; --var overrides take precedence"
+        "--vars-file", metavar="FILE", help="JSON or YAML file of variable name -> value; --var overrides take precedence"
     )
     render_parser.add_argument("--pretty", action="store_true", help="pretty-print the JSON output")
     render_parser.set_defaults(func=_cmd_render)
 
-    info_parser = subparsers.add_parser("info", help="show a template's name, capability, and variables")
-    info_parser.add_argument("template")
+    info_parser = add("info", help="show a template's name, capability, and variables")
+    info_parser.add_argument("template", help="template YAML file")
     info_parser.set_defaults(func=_cmd_info)
 
-    submit_parser = subparsers.add_parser(
+    submit_parser = add(
         "submit", help="render a template and submit it to an ai-job-gateway-compatible server"
     )
-    submit_parser.add_argument("template")
+    submit_parser.add_argument("template", help="template YAML file")
     submit_parser.add_argument(
         "--gateway-url", required=True, help="base URL of the gateway, e.g. http://127.0.0.1:8000"
     )
-    submit_parser.add_argument("--var", action="append", default=[], help="KEY=VALUE, repeatable")
+    submit_parser.add_argument("--var", action="append", default=[], metavar="KEY=VALUE", help="set a variable, e.g. --var subject='a red sneaker' (repeatable)")
     submit_parser.add_argument(
-        "--vars-file", help="JSON or YAML file of variable name -> value; --var overrides take precedence"
+        "--vars-file", metavar="FILE", help="JSON or YAML file of variable name -> value; --var overrides take precedence"
     )
     submit_parser.add_argument(
         "--timeout", type=_positive_seconds, default=60.0, help="seconds to wait for the job (default: 60)"
