@@ -32,7 +32,7 @@
     "sandbox",
     "version-control"
   ],
-  "summary": "Your prompts deserve git diff, not a database row. Templates as plain YAML, rendered through Jinja's SandboxedEnvironment with StrictUndefined so a typo'd variable fails loudly instead of rendering blank - plus a ${var} form that keeps an integer an integer instead of stringifying it. CLI: ptm. 156 tests.",
+  "summary": "Prompt templates as plain YAML in git, rendered through a sandboxed, strict Jinja environment so a typo'd variable fails loudly instead of rendering blank. Python CLI and library: ptm.",
   "key_features": [
     "Templates as plain YAML, so a prompt change is a diff in a pull request rather than a database row",
     "Rendered through Jinja's SandboxedEnvironment with StrictUndefined: a typo'd variable fails loudly instead of rendering blank",
