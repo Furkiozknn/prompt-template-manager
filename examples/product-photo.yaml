@@ -35,3 +35,19 @@ params:
   width: "${width}"
   height: "${height}"
   seed: "${seed}"
+
+# Run with: ptm test examples/product-photo.yaml
+tests:
+  - name: defaults give a square white-background photo
+    vars: {product_name: "a red sneaker"}
+    expect: {width: 1024, height: 1024, seed: 0}
+    contains:
+      prompt: ["a red sneaker", "seamless white background"]
+  - name: a custom background and size keep their types
+    vars: {product_name: "a mug", background_color: black, width: "1536"}
+    expect: {width: 1536}
+    contains: {prompt: "seamless black background"}
+    not_contains: {prompt: "white"}
+  - name: the product name is required
+    vars: {}
+    error: "missing required variable(s): 'product_name'"
