@@ -230,6 +230,36 @@ What `submit` checks before and while it talks to the network:
 - The `polling_url` the gateway hands back must be a path on the same host. A response such as `"polling_url": "@other.host/x"` would otherwise have turned `http://gateway` + that string into a request to `other.host`; it is refused instead.
 - A username or password in `--gateway-url` is never printed in an error message.
 
+### `diff`
+
+`git diff` shows which lines of the YAML changed. `ptm diff OLD NEW` says what the change means for the people who call the template, breaking changes first. Langfuse answers the same question with numbered prompt versions and labels on a server; here the versions are files in git, so the answer is a semantic diff you can run in CI:
+
+```
+$ ptm diff examples/product-photo.yaml edited/product-photo.yaml --check-version
+product-photo-on-solid-background: v1
+  BREAKING  variables.seed: removed (a caller still passing it gets 'unknown variable')
+  BREAKING  variables.background_color: now required
+  output    variables.background_color: default "white" -> null
+  output    variables.width: default 1024 -> 768
+  output    params.seed: param removed (was "${seed}")
+  output    params.prompt: professional studio ... background, soft [-even-] {+warm+} lighting, high detail, centered composition
+2 breaking, 4 output, 0 cosmetic change(s)
+error: version is still '1' although 6 breaking/output change(s) were made; bump 'version'
+```
+
+<sub>Real output; `edited/product-photo.yaml` is the example with `seed` removed, `background_color` made required, `width` defaulting to 768 and one word of the prompt changed. Exit code 1 because of `--check-version`.</sub>
+
+| Kind | Means | Examples |
+|---|---|---|
+| `BREAKING` | A caller has to change what they pass. | A variable removed, made required or added as required; a variable's type changed; `capability` changed (another endpoint). |
+| `output` | The same call now renders something different. | A default changed; a param added, removed or edited. Prompt text is shown as a word diff, `[-old-] {+new+}`. |
+| `cosmetic` | Nothing a caller or the model sees. | `description`s, the template's `name`. |
+
+- `--check-version` exits `1` when breaking or output changes come with the same `version`. When both versions are plain numbers (`1`, `2.3`, `1.4.0`), a breaking change must also raise the first number, the semver major. Other version strings only have to differ.
+- `--fail-on-breaking` exits `1` on any breaking change. `--json` prints the counts, every change and the version verdict.
+- Against the main branch in CI: `git show origin/main:templates/photo.yaml > base.yaml && ptm diff base.yaml templates/photo.yaml --check-version`.
+- Values compare with their JSON type, so a param going from `1` to `true` is a change.
+
 ## Using it as a library
 
 ```python
@@ -298,7 +328,7 @@ uv sync --group dev
 uv run pytest
 ```
 
-The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 156 tests (`uv run pytest --collect-only -q` prints the current count). `tests/test_untrusted_input.py` holds the hostile-template cases: dates, NaN, alias bombs, self-referencing aliases, oversized `**`/`*`.
+The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 168 tests (`uv run pytest --collect-only -q` prints the current count). `tests/test_untrusted_input.py` holds the hostile-template cases: dates, NaN, alias bombs, self-referencing aliases, oversized `**`/`*`.
 
 `assets/fails-loudly.svg` is regenerated from real runs with `uv run python arac/terminal-svg.py`. The demo above is regenerated with `pip install . && python arac/demo-uret.py` (`docs/demo/komutlar.txt` is the record; the recording needs node, playwright and ffmpeg).
 

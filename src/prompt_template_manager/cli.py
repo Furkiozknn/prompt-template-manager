@@ -133,6 +133,34 @@ def _cmd_submit(args: argparse.Namespace) -> None:
     print(json.dumps(result, indent=2))
 
 
+def _cmd_diff(args: argparse.Namespace) -> None:
+    from .diffing import BREAKING, diff_as_dict, diff_templates, format_diff
+
+    try:
+        old = load_template_file(args.old)
+        new = load_template_file(args.new)
+    except TemplateError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+    diff = diff_templates(old, new)
+    if args.json:
+        print(json.dumps(diff_as_dict(diff), indent=2, ensure_ascii=False))
+    else:
+        print(format_diff(diff))
+
+    failed = False
+    if args.check_version:
+        problem = diff.version_problem()
+        if problem:
+            print(f"error: {problem}", file=sys.stderr)
+            failed = True
+    if args.fail_on_breaking and diff.count(BREAKING):
+        print(f"error: {diff.count(BREAKING)} breaking change(s)", file=sys.stderr)
+        failed = True
+    if failed:
+        raise SystemExit(1)
+
+
 class _Parser(argparse.ArgumentParser):
     """Usage errors say where the examples are (still exit code 2)."""
 
@@ -150,6 +178,11 @@ _EPILOGS = {
     ),
     "info": "example: ptm info prompt.yaml   (which --var flags does this template take?)",
     "submit": "example: ptm submit prompt.yaml --gateway-url http://127.0.0.1:8000 --var subject=x",
+    "diff": (
+        "examples:\n"
+        "  ptm diff old/prompt.yaml prompt.yaml\n"
+        "  git show origin/main:prompt.yaml > base.yaml && ptm diff base.yaml prompt.yaml --check-version"
+    ),
 }
 
 
@@ -213,6 +246,23 @@ def main() -> None:
         "--timeout", type=_positive_seconds, default=60.0, help="seconds to wait for the job (default: 60)"
     )
     submit_parser.set_defaults(func=_cmd_submit)
+
+    diff_parser = add(
+        "diff", help="show what changed between two versions of a template, breaking changes first"
+    )
+    diff_parser.add_argument("old", help="the earlier version of the template")
+    diff_parser.add_argument("new", help="the later version of the template")
+    diff_parser.add_argument("--json", action="store_true", help="machine-readable JSON instead of text")
+    diff_parser.add_argument(
+        "--check-version",
+        action="store_true",
+        help="exit 1 unless 'version' changed with any breaking/output change (and, for numeric "
+        "versions, the major went up with a breaking one)",
+    )
+    diff_parser.add_argument(
+        "--fail-on-breaking", action="store_true", help="exit 1 if there is any breaking change"
+    )
+    diff_parser.set_defaults(func=_cmd_diff)
 
     args = parser.parse_args()
     try:
