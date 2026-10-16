@@ -19,6 +19,11 @@ buradaki en ust surumle ayni olmalidir; `yayinla.yml` etiketle
 ### Duzeltildi
 - cp1254 (Turkce Windows) konsolunda sablon adi/aciklamasinda `→` gibi bir karakter `ptm info` ve
   `ptm validate`'i UnicodeEncodeError ile dusuruyordu; cikti artik `?` ile yaziliyor.
+- `ptm submit`: tek bir ag kopmasi ya da 502/503/504, hala calisan bir isi "could not reach
+  gateway" ile bitiriyordu. Yoklama (poll) GET'i artik en fazla uc kez, 0.5 / 1 / 2 sn
+  bekleyerek tekrar deneniyor (`--timeout`u asmadan); is yeniden gonderilmiyor.
+- ai-job-gateway'den yeniden kopyalanan `gateway_poll.py`: bozuk bir 2xx gonderim yaniti
+  `assert`/`KeyError` yerine `GatewayContractError` veriyor; kullaniciya giden mesaj ayni.
 
 ### Eklendi
 - README demosu: `arac/demo-uret.py` gercek komutlari kosar, `docs/demo/` kaydi ve oynatmasini yazar.
