@@ -15,11 +15,14 @@ from typing import Any, Optional
 import httpx
 
 from .gateway_poll import (
+    GatewayContractError,
     GatewayHTTPError,
     classify_poll_body,
     expired_detail,
     is_expired_poll_response,
+    is_transient_poll_status,
     parse_submission,
+    poll_retry_delays,
     resolve_polling_url,
     submit_url,
 )
@@ -116,6 +119,31 @@ def _json_or_raise(response: httpx.Response, stage: str) -> Any:
         ) from exc
 
 
+def _poll_with_retry(client: httpx.Client, url: str, *, deadline: float) -> httpx.Response:
+    """One poll GET, retried on a network error or a 502/503/504.
+
+    A poll has no side effects, so asking again is safe; before this, one
+    dropped connection ended `ptm submit` with "could not reach gateway"
+    while the job kept running. The retry count and waits come from the
+    vendored ``gateway_poll`` module. A retry that would sleep past
+    ``deadline`` is not attempted; the last failure then surfaces as before.
+    """
+    delays = poll_retry_delays()
+    attempt = 0
+    while True:
+        give_up = attempt == len(delays) or time.monotonic() + delays[attempt] >= deadline
+        try:
+            response = client.get(url)
+        except httpx.TransportError:
+            if give_up:
+                raise
+        else:
+            if give_up or not is_transient_poll_status(response.status_code):
+                return response
+        time.sleep(delays[attempt])
+        attempt += 1
+
+
 def submit_and_wait(
     gateway_url: str,
     capability: str,
@@ -145,16 +173,16 @@ def submit_and_wait(
             job_id, polling_url = parse_submission(response.status_code, body_json, response.text)
         except GatewayHTTPError as exc:
             raise GatewaySubmissionError(exc.status_code, exc.body_text) from exc
-        except KeyError as exc:
+        except GatewayContractError as exc:
             raise GatewayResponseError(
-                f"submission response is missing {exc.args[0]!r}: {body_json!r}"
+                f"submission response is missing {exc.field!r}: {body_json!r}"
             ) from exc
         del job_id  # this client's public contract only ever returns the result, not the id
         poll_url = _checked_polling_url(base, base_url, polling_url)
 
         deadline = time.monotonic() + timeout
         while True:
-            poll_response = client.get(poll_url)
+            poll_response = _poll_with_retry(client, poll_url, deadline=deadline)
             if is_expired_poll_response(poll_response.status_code):
                 try:
                     detail_body = poll_response.json()
