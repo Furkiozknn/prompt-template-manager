@@ -27,6 +27,11 @@ buradaki en ust surumle ayni olmalidir; `yayinla.yml` etiketle
 
 ### Eklendi
 - README demosu: `arac/demo-uret.py` gercek komutlari kosar, `docs/demo/` kaydi ve oynatmasini yazar.
+- `ptm test TEMPLATE...`: sablonun `tests:` listesindeki her durumu render edip kontrol eder
+  (`vars`, `expect` alt kume, `equals` tam esitlik, `contains` / `not_contains` noktali yol,
+  `error` beklenen hata metni). Degerler JSON tipiyle karsilastirilir. Biri basarisizsa ya da
+  dosya gecersizse cikis 1; `--require-tests` testsiz sablonu da basarisiz sayar. Bozuk bir
+  `tests:` listesini `ptm validate` de reddeder. `examples/product-photo.yaml` uc ornek durum tasiyor.
 
 ## [0.1.0] - Yayimlanmadi
 

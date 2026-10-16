@@ -136,6 +136,9 @@ class Template:
     description: str = ""
     variables: dict[str, VariableSpec] = field(default_factory=dict)
     source_path: Optional[str] = None
+    #: Raw ``tests:`` cases from the file (see ``testing.py``); checked for
+    #: plain-JSON shape here, for meaning by ``testing.parse_cases``.
+    tests: list[Any] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any], *, source_path: Optional[str] = None) -> "Template":
@@ -181,6 +184,15 @@ class Template:
                 description=_require_text(spec, "description"),
             )
 
+        tests = data.get("tests")
+        if tests is None:
+            tests = []
+        if not isinstance(tests, list):
+            raise TemplateError("'tests' must be a list of test cases")
+        # Same plain-JSON and alias-bomb limits as params: a hostile file
+        # must not be able to hang `ptm test` either.
+        check_json_tree(tests, "tests")
+
         return cls(
             name=name,
             version=version,
@@ -189,4 +201,5 @@ class Template:
             description=description,
             variables=variables,
             source_path=source_path,
+            tests=tests,
         )
