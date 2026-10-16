@@ -1,4 +1,4 @@
-"""Command-line entry point: `ptm validate|render|info|submit`."""
+"""Command-line entry point: `ptm validate|render|info|test|submit`."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from .gateway_client import GatewayError, submit_and_wait
 from .loader import load_template_file, load_vars_file
 from .models import TemplateError
 from .renderer import render_template, validate_template
+from .testing import parse_cases
 
 
 def _parse_var_args(pairs: list[str]) -> dict[str, str]:
@@ -44,6 +45,9 @@ def _cmd_validate(args: argparse.Namespace) -> None:
         try:
             template = load_template_file(path)
             warnings = validate_template(template)
+            # A malformed tests: list is a broken file too, even for
+            # someone who only runs validate in CI.
+            parse_cases(template)
         except TemplateError as exc:
             print(f"INVALID: {path}: {exc}", file=sys.stderr)
             invalid_count += 1
@@ -113,6 +117,42 @@ def _cmd_info(args: argparse.Namespace) -> None:
             print(f"    {name}: {', '.join(bits)}{desc}")
 
 
+def _cmd_test(args: argparse.Namespace) -> None:
+    from .testing import run_tests
+
+    passed = failed = invalid = untested = 0
+    for path in args.templates:
+        try:
+            template = load_template_file(path)
+            results = run_tests(template)
+        except TemplateError as exc:
+            print(f"INVALID: {path}: {exc}", file=sys.stderr)
+            invalid += 1
+            continue
+        print(f"{path} ({template.name} v{template.version})")
+        if not results:
+            print("  no tests" + (" (required by --require-tests)" if args.require_tests else ""))
+            untested += 1
+            continue
+        for result in results:
+            print(f"  {'PASS' if result.passed else 'FAIL'}  {result.name}")
+            for failure in result.failures:
+                print(f"        {failure}")
+            if result.passed:
+                passed += 1
+            else:
+                failed += 1
+
+    summary = f"\n{passed} passed, {failed} failed"
+    if invalid:
+        summary += f", {invalid} invalid"
+    if untested:
+        summary += f", {untested} template(s) without tests"
+    print(summary)
+    if failed or invalid or (untested and args.require_tests):
+        raise SystemExit(1)
+
+
 def _cmd_submit(args: argparse.Namespace) -> None:
     overrides = _resolve_overrides(args)
     try:
@@ -177,6 +217,7 @@ _EPILOGS = {
         "  ptm render prompt.yaml --vars-file vars.yaml"
     ),
     "info": "example: ptm info prompt.yaml   (which --var flags does this template take?)",
+    "test": "example: ptm test templates/*.yaml   (exit 1 if any case fails or a file is invalid)",
     "submit": "example: ptm submit prompt.yaml --gateway-url http://127.0.0.1:8000 --var subject=x",
     "diff": (
         "examples:\n"
@@ -230,6 +271,17 @@ def main() -> None:
     info_parser = add("info", help="show a template's name, capability, and variables")
     info_parser.add_argument("template", help="template YAML file")
     info_parser.set_defaults(func=_cmd_info)
+
+    test_parser = add(
+        "test", help="render each template's tests: cases and check the output (offline)"
+    )
+    test_parser.add_argument(
+        "templates", nargs="+", metavar="TEMPLATE", help="one or more template files (shell globs work)"
+    )
+    test_parser.add_argument(
+        "--require-tests", action="store_true", help="also fail for a template that has no tests: list"
+    )
+    test_parser.set_defaults(func=_cmd_test)
 
     submit_parser = add(
         "submit", help="render a template and submit it to an ai-job-gateway-compatible server"

@@ -21,6 +21,16 @@ Not on PyPI yet, so `uvx` builds it from GitHub: 11.4 s from an empty uv cache, 
 | you feed a gateway or a model API a params object and want type errors caught before the request, not in the response | your prompts are built from runtime data structures: variables are strings, numbers and booleans only |
 | CI should reject a broken template: `ptm validate templates/*.yaml` exits `1` if any file is invalid | you render templates you have not read and need a hard security boundary: the sandbox is defense in depth, see [Security](#security) |
 | you want one self-contained file per prompt | you want template inheritance or includes: there are none, on purpose |
+| a prompt change should break a test in CI, not a render in production: `ptm test` checks each template's own `tests:` cases | you want to grade what a *model* answers: `ptm test` checks the rendered request, not the response |
+
+## Why not Langfuse or Prompty?
+
+- **[Langfuse](https://langfuse.com/docs/prompt-management/overview) prompt management** stores and versions prompts in Langfuse. Deployment labels control rollouts, the UI lets non-developers edit, and the SDK fetches and caches prompts.
+- **[Prompty](https://github.com/microsoft/prompty)** is a Markdown file format with YAML frontmatter, role markers and Jinja2 or Mustache templating. Its runtimes cover Python, TypeScript, C# and more, and it has a VS Code extension.
+
+Use Langfuse if you want a prompt registry with a UI and labelled rollouts. Use Prompty if you want one chat-prompt file shared across several languages.
+
+What `ptm` does differently: it needs no server and has no runtime that calls a model. A prompt is a YAML file in your repo. Variables are typed. Rendering runs in a sandboxed, `StrictUndefined` Jinja environment, so a typo, a missing variable or a sandbox escape fails loudly. The output is the exact params JSON a generation API takes, not a chat transcript.
 
 ## The problem this solves
 
@@ -217,6 +227,53 @@ ptm render templates/photo.yaml --vars-file prod-run.yaml --pretty
 
 A quick human-readable summary of a template's variables, types, and defaults — useful before filling in `--var` flags by hand.
 
+### `test`
+
+`validate` proves a template *can* render. `test` pins *what* it renders. A template may carry a `tests:` list next to its params, the same idea as promptfoo's `tests:`. Here the thing under test is the render itself, so every case is deterministic, offline and free: a pre-merge CI step, not an eval run.
+
+```yaml
+# examples/product-photo.yaml (end of the file)
+tests:
+  - name: defaults give a square white-background photo
+    vars: {product_name: "a red sneaker"}
+    expect: {width: 1024, height: 1024, seed: 0}
+    contains:
+      prompt: ["a red sneaker", "seamless white background"]
+  - name: a custom background and size keep their types
+    vars: {product_name: "a mug", background_color: black, width: "1536"}
+    expect: {width: 1536}
+    contains: {prompt: "seamless black background"}
+    not_contains: {prompt: "white"}
+  - name: the product name is required
+    vars: {}
+    error: "missing required variable(s): 'product_name'"
+```
+
+```
+$ ptm test examples/product-photo.yaml
+examples/product-photo.yaml (product-photo-on-solid-background v1)
+  PASS  defaults give a square white-background photo
+  PASS  a custom background and size keep their types
+  PASS  the product name is required
+
+3 passed, 0 failed
+```
+
+Change the default `width` to 768, and the first case fails in the pull request that made the change, with the exact difference: `FAIL ... width: expected 1024, got 768`.
+
+| Key | Checks |
+|---|---|
+| `vars` | The variables to render with, exactly as `--vars-file` would pass them (same coercion). |
+| `expect` | These params at least. Nested mappings are compared key by key; lists and scalars must be equal. |
+| `equals` | The whole rendered params object, nothing more or less. |
+| `contains` / `not_contains` | A dotted param path (`prompt`, `options.style`, `images.0`) mapped to one string or a list of them. |
+| `error` | The render must **fail**, and the error message must contain this text. Use it to pin that a bad input fails loudly. |
+
+- Values compare with their JSON type: `1` does not equal `true`, and `"1536"` does not equal `1536`. That is the point of typed variables.
+- Every failure in a case is listed, not only the first.
+- Malformed cases are template errors, so `ptm validate` rejects them too: an unknown key (with did-you-mean), a case without any assertion, `error` combined with output checks, a `vars` name the template does not declare, a duplicate name. `tests:` gets the same plain-JSON and alias-bomb limits as `params`.
+- `ptm test templates/*.yaml` exits `1` if any case fails or any file is invalid. A template without `tests:` prints `no tests` and passes, unless `--require-tests` is given.
+
 ### `submit`
 
 `render` + `POST` to `{gateway-url}/v1/{capability}` + poll until ready, using the [same submit/poll contract `ai-job-gateway` implements](https://github.com/Furkiozknn/ai-job-gateway) (works against any server implementing that contract, not only that specific repo). Accepts the same `--var` / `--vars-file` flags as `render`.
@@ -328,7 +385,7 @@ uv sync --group dev
 uv run pytest
 ```
 
-The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 168 tests (`uv run pytest --collect-only -q` prints the current count). `tests/test_untrusted_input.py` holds the hostile-template cases: dates, NaN, alias bombs, self-referencing aliases, oversized `**`/`*`.
+The suite covers the model/loader/renderer layers directly and the CLI end-to-end (`capsys`-captured stdout/stderr, no subprocess spawning); the gateway-submission path is tested against `httpx.MockTransport`, no real server needed. 216 tests (`uv run pytest --collect-only -q` prints the current count). `tests/test_untrusted_input.py` holds the hostile-template cases: dates, NaN, alias bombs, self-referencing aliases, oversized `**`/`*`.
 
 `assets/fails-loudly.svg` is regenerated from real runs with `uv run python arac/terminal-svg.py`. The demo above is regenerated with `pip install . && python arac/demo-uret.py` (`docs/demo/komutlar.txt` is the record; the recording needs node, playwright and ffmpeg).
 
