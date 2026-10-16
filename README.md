@@ -22,6 +22,15 @@ Not on PyPI yet, so `uvx` builds it from GitHub: 11.4 s from an empty uv cache, 
 | CI should reject a broken template: `ptm validate templates/*.yaml` exits `1` if any file is invalid | you render templates you have not read and need a hard security boundary: the sandbox is defense in depth, see [Security](#security) |
 | you want one self-contained file per prompt | you want template inheritance or includes: there are none, on purpose |
 
+## Why not Langfuse or Prompty?
+
+- **[Langfuse](https://langfuse.com/docs/prompt-management/overview) prompt management** stores and versions prompts in Langfuse. Deployment labels control rollouts, the UI lets non-developers edit, and the SDK fetches and caches prompts.
+- **[Prompty](https://github.com/microsoft/prompty)** is a Markdown file format with YAML frontmatter, role markers and Jinja2 or Mustache templating. Its runtimes cover Python, TypeScript, C# and more, and it has a VS Code extension.
+
+Use Langfuse if you want a prompt registry with a UI and labelled rollouts. Use Prompty if you want one chat-prompt file shared across several languages.
+
+What `ptm` does differently: it needs no server and has no runtime that calls a model. A prompt is a YAML file in your repo. Variables are typed. Rendering runs in a sandboxed, `StrictUndefined` Jinja environment, so a typo, a missing variable or a sandbox escape fails loudly. The output is the exact params JSON a generation API takes, not a chat transcript.
+
 ## The problem this solves
 
 Generation prompts tend to end up in one of two bad places: buried as string literals in application code (so changing a prompt means a code review and a deploy), or stashed as opaque rows in some internal "prompt management" database (so `git blame` and `git diff` — the tools you already trust for reviewing every other change to your system — can't see them at all).
