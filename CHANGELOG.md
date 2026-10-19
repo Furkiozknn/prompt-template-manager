@@ -26,6 +26,12 @@ buradaki en ust surumle ayni olmalidir; `yayinla.yml` etiketle
   `assert`/`KeyError` yerine `GatewayContractError` veriyor; kullaniciya giden mesaj ayni.
 
 ### Eklendi
+- `ptm diff OLD NEW`: iki sablon surumu arasindaki anlamsal fark, once kiranlar. `breaking`
+  (degisken kaldirildi, zorunlu oldu ya da zorunlu eklendi, tip veya capability degisti), `output`
+  (varsayilan, param ya da istem metni degisti; metin `[-eski-] {+yeni+}` kelime farkiyla) ve
+  `cosmetic` (aciklamalar). `--check-version` breaking/output degisiklikte `version` artmadiysa,
+  sayisal surumlerde kiran degisiklikte ana surum artmadiysa cikis 1 verir; `--fail-on-breaking`
+  ve `--json` da var.
 - README demosu: `arac/demo-uret.py` gercek komutlari kosar, `docs/demo/` kaydi ve oynatmasini yazar.
 - `ptm test TEMPLATE...`: sablonun `tests:` listesindeki her durumu render edip kontrol eder
   (`vars`, `expect` alt kume, `equals` tam esitlik, `contains` / `not_contains` noktali yol,
